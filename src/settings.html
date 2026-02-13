@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="settings.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Murmur Voice Settings</title>
+    <script src="/settings.js" defer></script>
+  </head>
+  <body>
+    <div id="settings-app">
+
+      <header class="header">
+        <h1>Preferences</h1>
+        <span class="version">v0.1.0</span>
+      </header>
+
+      <section class="group">
+        <div class="group-label">Input</div>
+        <div class="group-card">
+          <div class="row">
+            <span class="row-label">Push-to-Talk</span>
+            <button id="ptt-record" class="record-btn">Left Option</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="group">
+        <div class="group-label">Transcription</div>
+        <div class="group-card">
+          <div class="row">
+            <span class="row-label">Language</span>
+            <select id="language">
+              <option value="auto">Auto Detect</option>
+              <option value="en">English</option>
+              <option value="zh">Chinese</option>
+            </select>
+          </div>
+          <div class="row">
+            <span class="row-label">Engine</span>
+            <select id="engine">
+              <option value="local">Local (Whisper)</option>
+              <option value="groq">Groq API</option>
+            </select>
+          </div>
+          <div class="row" id="model-section">
+            <span class="row-label">Model</span>
+            <select id="model">
+              <option value="large-v3-turbo">Large V3 Turbo</option>
+              <option value="medium">Medium</option>
+              <option value="small">Small</option>
+              <option value="base">Base</option>
+            </select>
+          </div>
+          <div class="row" id="groq-section" style="display: none;">
+            <span class="row-label">API Key</span>
+            <input type="password" id="groq-api-key" placeholder="gsk_..." spellcheck="false" />
+          </div>
+        </div>
+      </section>
+
+      <section class="group">
+        <div class="group-label">Appearance</div>
+        <div class="group-card">
+          <div class="row">
+            <span class="row-label">Opacity</span>
+            <div class="slider-control">
+              <input type="range" id="opacity" min="0.3" max="1.0" step="0.01" />
+              <span id="opacity-value" class="slider-readout">78%</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="group">
+        <div class="group-label">System</div>
+        <div class="group-card">
+          <div class="row">
+            <span class="row-label">Launch at Login</span>
+            <label class="toggle">
+              <input type="checkbox" id="auto-start" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <div id="save-status" class="save-status"></div>
+        <div class="actions">
+          <button id="btn-cancel" class="btn ghost">Cancel</button>
+          <button id="btn-save" class="btn primary">Save</button>
+        </div>
+      </footer>
+
+    </div>
+  </body>
+</html>

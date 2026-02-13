@@ -57,6 +57,13 @@ cargo build --release
 cargo run --release
 ```
 
+## Roadmap
+
+- [ ] Groq API integration (text-only cloud transcription)
+- [ ] LLM text polishing (local Ollama / Groq)
+- [ ] Windows support (replace CGEventTap with SetWindowsHookEx, CUDA fallback for Whisper)
+- [ ] Linux support
+
 ## Privacy
 
 Murmur was born from a security audit of a commercial voice-to-text app that was found to:

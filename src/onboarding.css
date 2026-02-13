@@ -1,0 +1,288 @@
+:root {
+  --bg-deep: #f0f0f2;
+  --bg-card: #ffffff;
+  --bg-elevated: #e8e8ed;
+  --accent: #6c5ce7;
+  --accent-glow: rgba(108, 92, 231, 0.10);
+  --accent-dim: rgba(108, 92, 231, 0.25);
+  --text-primary: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-muted: #aeaeb2;
+  --border: rgba(0, 0, 0, 0.04);
+  --radius: 10px;
+  --shadow-btn: 0 1px 3px rgba(108, 92, 231, 0.18);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-deep: #1c1c1e;
+    --bg-card: #2c2c2e;
+    --bg-elevated: #3a3a3c;
+    --accent: #7c6df0;
+    --accent-glow: rgba(124, 109, 240, 0.12);
+    --accent-dim: rgba(124, 109, 240, 0.35);
+    --text-primary: #e5e5e7;
+    --text-secondary: #8e8e93;
+    --text-muted: #636366;
+    --border: rgba(255, 255, 255, 0.06);
+    --shadow-btn: 0 1px 6px rgba(124, 109, 240, 0.25);
+  }
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  background: var(--bg-deep);
+  font-family: "Plus Jakarta Sans", -apple-system, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--text-primary);
+  height: 100%;
+  overflow: hidden;
+}
+
+#onboarding-app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 40px 48px 32px;
+  position: relative;
+}
+
+/* ── Steps ── */
+
+.step {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 16px;
+  max-width: 400px;
+  animation: fadeIn 0.25s ease;
+}
+
+.step.active {
+  display: flex;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.step-icon {
+  margin-bottom: 4px;
+}
+
+h1 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.description {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.description.muted {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── Highlights (Step 1) ── */
+
+.highlights {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 0 20px;
+}
+
+.highlight-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.highlight-icon {
+  font-size: 6px;
+  color: var(--accent);
+}
+
+/* ── Permissions (Step 2) ── */
+
+.permission-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.permission-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+}
+
+.permission-item + .permission-item {
+  border-top: 1px solid var(--border);
+}
+
+.permission-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.permission-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── Model Download (Step 3) ── */
+
+.model-status {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.progress-wrap {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress-track {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  min-width: 36px;
+  text-align: right;
+}
+
+/* ── Record Button (Step 4) ── */
+
+.record-btn {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 28px;
+  border: none;
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-width: 160px;
+  text-align: center;
+  border: 1px solid var(--border);
+}
+
+.record-btn:hover {
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.record-btn.recording {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* ── Buttons ── */
+
+.btn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 24px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: var(--shadow-btn);
+}
+
+.btn.primary:hover {
+  filter: brightness(1.08);
+}
+
+.btn.primary:active {
+  transform: scale(0.97);
+}
+
+.btn.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Step Dots ── */
+
+.step-dots {
+  position: absolute;
+  bottom: 24px;
+  display: flex;
+  gap: 8px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.4;
+  transition: all 0.2s ease;
+}
+
+.dot.active {
+  background: var(--accent);
+  opacity: 1;
+  transform: scale(1.2);
+}

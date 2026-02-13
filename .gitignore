@@ -1,32 +1,44 @@
-# Rust
-/target
-**/*.rs.bk
-Cargo.lock
 
-# Tauri
-/src-tauri/target
-
-# Node (Tauri frontend)
-node_modules
-dist
-
-# IDE
-.vscode
-.idea
-*.swp
-*.swo
-
-# macOS
+!.vscode/extensions.json
 .DS_Store
-
-# Environment
 .env
 .env.local
-
+.idea
+.vscode
+.vscode/*
+*.app
+*.dmg
+*.local
+*.log
+*.njsproj
+*.ntvs*
+*.sln
+*.suo
+*.sw?
+*.swo
+*.swp
+**/*.rs.bk
+/src-tauri/target
+/target
+# Build artifacts
+# Editor directories and files
+# Environment
+# IDE
+# Logs
+# macOS
+# Node (Tauri frontend)
+# Rust
+# Tauri
 # Whisper models
+Cargo.lock
+dist
+dist-ssr
+lerna-debug.log*
+logs
 models/*.bin
 models/*.ggml
-
-# Build artifacts
-*.dmg
-*.app
+node_modules
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
