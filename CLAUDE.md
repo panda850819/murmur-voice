@@ -31,7 +31,9 @@ Frontend (src/)                    Backend (src-tauri/src/)
 └── *.css                          ├── clipboard.rs  arboard + rdev Cmd+V simulation
                                    ├── model.rs      HuggingFace model download
                                    ├── settings.rs   JSON persistence + key mapping
-                                   └── state.rs      recording state machine
+                                   ├── state.rs      recording state machine
+                                   ├── llm.rs        Groq LLM API post-processing
+                                   └── frontapp.rs   macOS foreground app detection (FFI)
 ```
 
 **IPC**: Frontend calls backend via `invoke("command")`, backend pushes to frontend via `app.emit("event", payload)`.
@@ -44,10 +46,12 @@ Frontend (src/)                    Backend (src-tauri/src/)
 Hotkey press → CGEventTap → channel → do_start_recording()
   → AudioRecorder::start() → spawn live transcription thread (peek every 2s)
 Hotkey release → do_stop_recording()
-  → audio.stop() → whisper.transcribe() → clipboard.insert_text(Cmd+V) → emit result
+  → audio.stop() → whisper.transcribe() → (if LLM enabled) llm.process_text() → clipboard.insert_text(Cmd+V) → emit result → hide window after 2s
 ```
 
-State machine: `Idle → Starting → Recording → Stopping → Transcribing → Idle`
+State machine: `Idle → Starting → Recording → Stopping → Transcribing → [Processing] → Idle`
+
+Two recording modes: **Hold** (press=start, release=stop) and **Toggle** (press toggles, 5-min auto-stop).
 
 ## Key Patterns
 

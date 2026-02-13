@@ -513,24 +513,19 @@ pub fn run() {
                         hotkey::HotkeyEvent::Pressed => {
                             match mode.as_str() {
                                 "toggle" => {
-                                    if is_recording {
+                                    let murmur_state = app_handle.state::<MurmurState>();
+                                    let current = murmur_state.app_state.current();
+                                    if current == state::RecordingState::Recording {
                                         is_recording = false;
                                         if let Err(e) = do_stop_recording(&app_handle) {
                                             log::error!("failed to stop recording: {}", e);
-                                            let murmur_state = app_handle.state::<MurmurState>();
                                             let _ = murmur_state
                                                 .app_state
                                                 .transition(state::RecordingState::Idle);
                                             let _ = app_handle
                                                 .emit("recording_state_changed", "idle");
                                         }
-                                    } else {
-                                        let murmur_state = app_handle.state::<MurmurState>();
-                                        if murmur_state.app_state.current()
-                                            != state::RecordingState::Idle
-                                        {
-                                            continue;
-                                        }
+                                    } else if current == state::RecordingState::Idle {
                                         match do_start_recording(&app_handle) {
                                             Ok(()) => {
                                                 is_recording = true;

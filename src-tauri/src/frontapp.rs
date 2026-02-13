@@ -67,6 +67,7 @@ pub(crate) fn style_for_app(bundle_id: &str) -> &'static str {
         | "com.jetbrains.intellij"
         | "dev.zed.Zed"
         | "com.sublimetext.4"
+        | "com.todesktop.230313mzl4w4u92" // Cursor
         | "com.googlecode.iterm2"
         | "com.apple.Terminal" => "technical",
 

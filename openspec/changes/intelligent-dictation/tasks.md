@@ -44,8 +44,8 @@
 
 ## 7. Integration & Testing
 
-- [ ] 7.1 Verify LLM pipeline end-to-end: speak → Whisper → LLM → Traditional Chinese clipboard output
-- [ ] 7.2 Verify toggle mode: press once to start, press again to stop, auto-stop at 5 min
-- [ ] 7.3 Verify dictionary injection improves recognition of custom terms
-- [ ] 7.4 Verify fallback when Groq API is unavailable
+- [x] 7.1 Verify LLM pipeline end-to-end: speak → Whisper → LLM → Traditional Chinese clipboard output
+- [x] 7.2 Verify toggle mode: press once to start, press again to stop, auto-stop at 5 min
+- [x] 7.3 Verify dictionary injection improves recognition of custom terms
+- [x] 7.4 Verify fallback when Groq API is unavailable
 - [x] 7.5 Run `cargo check` and `cargo clippy` with zero warnings
