@@ -1,0 +1,32 @@
+# Rust
+/target
+**/*.rs.bk
+Cargo.lock
+
+# Tauri
+/src-tauri/target
+
+# Node (Tauri frontend)
+node_modules
+dist
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Environment
+.env
+.env.local
+
+# Whisper models
+models/*.bin
+models/*.ggml
+
+# Build artifacts
+*.dmg
+*.app
