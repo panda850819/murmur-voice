@@ -225,6 +225,94 @@ input[type="text"]::placeholder {
   color: var(--text-muted);
 }
 
+/* ── Dictionary Tags ── */
+
+.dict-section {
+  border-top: 1px solid var(--row-border);
+}
+
+.dict-section .row {
+  border-top: none;
+}
+
+.dict-count {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.dict-input-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px 8px;
+  min-height: 32px;
+}
+
+.dict-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.dict-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 6px 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  animation: tagIn 0.15s ease;
+}
+
+@keyframes tagIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.dict-tag-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  border: none;
+  color: #fff;
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s;
+}
+
+.dict-tag-x:hover {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.dict-input {
+  font-family: inherit;
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 11px;
+  outline: none;
+  flex: 1;
+  min-width: 100px;
+  padding: 2px 0;
+}
+
+.dict-input::placeholder {
+  color: var(--text-muted);
+}
+
 input[type="password"] {
   font-family: "SF Mono", "Menlo", monospace;
   appearance: none;
@@ -352,7 +440,8 @@ input[type="range"]::-webkit-slider-thumb:hover {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding-top: 8px;
+  padding-top: 12px;
+  padding-bottom: 4px;
 }
 
 .actions {

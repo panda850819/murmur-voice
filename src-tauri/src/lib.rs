@@ -80,65 +80,73 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
         });
     }
 
-    // Start live transcription thread
+    // Start live transcription thread (local engine only — Groq would be too expensive)
+    let use_local_engine = state
+        .settings
+        .lock()
+        .map(|s| s.engine != "groq")
+        .unwrap_or(true);
+
     state.live_stop.store(false, Ordering::SeqCst);
-    let app_clone = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(1500));
+    if use_local_engine {
+        let app_clone = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(1500));
 
-        loop {
-            let ms = app_clone.state::<MurmurState>();
-            if ms.live_stop.load(Ordering::SeqCst) {
-                break;
-            }
-
-            let samples = {
-                let lock = match ms.recorder.lock() {
-                    Ok(l) => l,
-                    Err(_) => break,
-                };
-                match lock.as_ref() {
-                    Some(rec) => rec.peek_samples(),
-                    None => break,
+            loop {
+                let ms = app_clone.state::<MurmurState>();
+                if ms.live_stop.load(Ordering::SeqCst) {
+                    break;
                 }
-            };
 
-            if samples.len() < 3200 {
-                std::thread::sleep(std::time::Duration::from_secs(1));
-                continue;
-            }
-
-            let (language, dictionary) = ms
-                .settings
-                .lock()
-                .map(|s| (s.whisper_language().to_string(), s.dictionary.clone()))
-                .unwrap_or_else(|_| ("auto".to_string(), String::new()));
-
-            let text = {
-                let engine_lock = match ms.engine.try_lock() {
-                    Ok(l) => l,
-                    Err(_) => {
-                        std::thread::sleep(std::time::Duration::from_millis(500));
-                        continue;
+                let samples = {
+                    let lock = match ms.recorder.lock() {
+                        Ok(l) => l,
+                        Err(_) => break,
+                    };
+                    match lock.as_ref() {
+                        Some(rec) => rec.peek_samples(),
+                        None => break,
                     }
                 };
-                match engine_lock.as_ref() {
-                    Some(engine) => engine.transcribe(&samples, &language, &dictionary).unwrap_or_default(),
-                    None => break,
+
+                if samples.len() < 3200 {
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    continue;
                 }
-            };
 
-            if ms.live_stop.load(Ordering::SeqCst) {
-                break;
+                let (language, initial_prompt) = ms
+                    .settings
+                    .lock()
+                    .map(|s| (s.whisper_language().to_string(), s.whisper_initial_prompt()))
+                    .unwrap_or_else(|_| ("auto".to_string(), String::new()));
+
+                let text = {
+                    let engine_lock = match ms.engine.try_lock() {
+                        Ok(l) => l,
+                        Err(_) => {
+                            std::thread::sleep(std::time::Duration::from_millis(500));
+                            continue;
+                        }
+                    };
+                    match engine_lock.as_ref() {
+                        Some(engine) => engine.transcribe(&samples, &language, &initial_prompt).unwrap_or_default(),
+                        None => break,
+                    }
+                };
+
+                if ms.live_stop.load(Ordering::SeqCst) {
+                    break;
+                }
+
+                if !text.is_empty() {
+                    let _ = app_clone.emit("partial_transcription", &text);
+                }
+
+                std::thread::sleep(std::time::Duration::from_secs(2));
             }
-
-            if !text.is_empty() {
-                let _ = app_clone.emit("partial_transcription", &text);
-            }
-
-            std::thread::sleep(std::time::Duration::from_secs(2));
-        }
-    });
+        });
+    }
 
     Ok(())
 }
@@ -177,19 +185,35 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         .transition(state::RecordingState::Transcribing);
     let _ = app.emit("recording_state_changed", "transcribing");
 
-    let (language, dictionary) = state
+    let (engine_type, language, initial_prompt, api_key_for_whisper) = state
         .settings
         .lock()
-        .map(|s| (s.whisper_language().to_string(), s.dictionary.clone()))
-        .unwrap_or_else(|_| ("auto".to_string(), String::new()));
+        .map(|s| (
+            s.engine.clone(),
+            s.whisper_language().to_string(),
+            s.whisper_initial_prompt(),
+            s.groq_api_key.clone(),
+        ))
+        .unwrap_or_else(|_| ("local".to_string(), "auto".to_string(), String::new(), String::new()));
 
-    let raw_text = {
+    let raw_text = if engine_type == "groq" && !api_key_for_whisper.is_empty() {
+        // Groq cloud Whisper
+        let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+        rt.block_on(llm::transcribe_groq(
+            &api_key_for_whisper,
+            &samples,
+            &language,
+            &initial_prompt,
+        ))
+        .map_err(|e| e.to_string())?
+    } else {
+        // Local Whisper
         let engine_lock = state
             .engine
             .lock()
             .map_err(|e| format!("engine mutex poisoned: {e}"))?;
         match engine_lock.as_ref() {
-            Some(engine) => engine.transcribe(&samples, &language, &dictionary).map_err(|e| e.to_string())?,
+            Some(engine) => engine.transcribe(&samples, &language, &initial_prompt).map_err(|e| e.to_string())?,
             None => return Err("whisper engine not loaded".to_string()),
         }
     };
@@ -374,7 +398,7 @@ fn open_settings(app: tauri::AppHandle) {
             tauri::WebviewUrl::App("settings.html".into()),
         )
         .title("Murmur Voice Settings")
-        .inner_size(460.0, 680.0)
+        .inner_size(460.0, 700.0)
         .resizable(false)
         .build();
     }
@@ -385,6 +409,11 @@ fn open_settings(app: tauri::AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let initial_settings = settings::load_settings();
+    log::info!(
+        "loaded settings: onboarding_complete={}, recording_mode={}",
+        initial_settings.onboarding_complete,
+        initial_settings.recording_mode
+    );
     hotkey::set_hotkey_mask(initial_settings.ptt_key_mask());
 
     tauri::Builder::default()

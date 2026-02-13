@@ -6,43 +6,34 @@ Privacy-first voice-to-text for macOS, built with Rust.
 
 ## What is Murmur?
 
-Murmur is a local-first voice dictation tool that transcribes your speech and inserts polished text at your cursor position -- in any app. Unlike cloud-based alternatives, your audio never leaves your machine.
+Murmur is a voice dictation tool that transcribes your speech and inserts polished text at your cursor position -- in any app. It supports both local (on-device) and cloud transcription, with optional LLM post-processing to clean up filler words, fix punctuation, and convert Simplified Chinese to Traditional Chinese.
 
 ## Features
 
 - **Push-to-Talk** -- Hold a modifier key to speak, release to insert text
+- **Toggle Mode** -- Press once to start recording, press again to stop (with 5-min auto-stop)
 - **Custom Hotkey** -- Choose any modifier key (Option, Command, Shift, Control, left or right)
-- **Local Transcription** -- Runs Whisper on-device via whisper-rs (Metal accelerated on Apple Silicon)
-- **Live Preview** -- See partial transcription while you speak
+- **Dual Engine** -- Local Whisper (Metal GPU) or Groq cloud API
+- **LLM Post-Processing** -- Clean up filler words, add punctuation, Simplified-to-Traditional Chinese conversion via Groq LLM
+- **App-Aware Style** -- Automatically adjusts output tone based on the active app (e.g. formal in Slack, technical in VS Code)
+- **Personal Dictionary** -- Add custom terms to improve transcription accuracy
+- **Live Preview** -- See partial transcription while you speak (local engine only)
+- **15 Languages** -- Auto-detect or manually select from 15 supported languages
 - **System-wide** -- Works in any text field across all apps
 - **Lightweight** -- Tauri-based, ~30-50MB vs 200MB+ Electron apps
 - **Open Source** -- Fully auditable, no telemetry, no tracking
 
-## Architecture
+## How It Works
 
 ```
-Hotkey (CGEventTap) -> Record (cpal) -> Transcribe (whisper-rs) -> Insert (clipboard + Cmd+V)
+Hotkey → Record (cpal) → Transcribe (Whisper) → LLM Clean-up (optional) → Paste at cursor
 ```
 
-All audio processing happens locally.
+**Each recording triggers at most 2 API calls** (when using Groq): one for Whisper transcription, one for LLM post-processing.
 
-## Tech Stack
+## Setup Guide
 
-| Component | Crate | Purpose |
-|-----------|-------|---------|
-| App Framework | `tauri` 2 | Lightweight desktop app |
-| Audio Capture | `cpal` | Microphone input |
-| Speech-to-Text | `whisper-rs` | Local Whisper inference (Metal) |
-| Hotkey Detection | CGEventTap (CoreGraphics FFI) | Global modifier key listener |
-| Text Insertion | `arboard` + `rdev` | Clipboard write + Cmd+V simulation |
-
-## Requirements
-
-- macOS 12.0+ (Apple Silicon recommended)
-- Microphone permission
-- Accessibility permission (for global hotkey + text insertion)
-
-## Getting Started
+### 1. Install & Run
 
 ```bash
 git clone https://github.com/panda850819/murmur-voice.git
@@ -51,13 +42,85 @@ pnpm install
 pnpm tauri dev
 ```
 
-## Roadmap
+### 2. First Launch
 
-- [ ] LLM text polishing (local Ollama / Groq)
-- [ ] Multiple language model sizes (currently large-v3-turbo only)
-- [ ] Auto-start at login
-- [ ] Windows support
-- [ ] Linux support
+On first launch, Murmur will guide you through:
+1. Granting **Microphone** and **Accessibility** permissions
+2. Downloading the Whisper model (~800MB, one-time)
+3. Setting your Push-to-Talk key
+
+### 3. Transcription Engine
+
+| Engine | Speed | Quality | Privacy | Setup |
+|--------|-------|---------|---------|-------|
+| **Local (Whisper)** | ~1-3s | Good | Audio stays on device | Download model (~800MB) |
+| **Groq API** | <1s | Good | Audio sent to Groq servers | Free API key from [console.groq.com](https://console.groq.com) |
+
+To switch engines: **Settings > Transcription > Engine**
+
+### 4. LLM Post-Processing (Recommended)
+
+Requires a **Groq API key** (same key used for both Whisper and LLM).
+
+What it does:
+- Removes filler words (um, uh, 嗯, 啊, 那個, 就是...)
+- Removes false starts and self-corrections
+- Adds proper punctuation (full-width for Chinese, half-width for English)
+- Converts Simplified Chinese to Traditional Chinese (Taiwan standard)
+- Adds spaces between Chinese and English text
+- Formats lists and paragraphs when appropriate
+
+To enable: **Settings > AI Processing > LLM Post-Processing**
+
+### 5. Personal Dictionary
+
+Add frequently used terms (names, jargon, acronyms) to improve transcription accuracy. These are injected into Whisper's initial prompt.
+
+To configure: **Settings > Transcription > Dictionary** (type a term, press Enter to add)
+
+### 6. App-Aware Style
+
+When enabled, Murmur detects the foreground app and adjusts the LLM output tone:
+
+| App | Style |
+|-----|-------|
+| Slack, Discord, LINE, Telegram | Casual |
+| VS Code, Terminal, Cursor | Technical |
+| Pages, Word, Google Docs | Formal |
+| Others | Default (natural) |
+
+To enable: **Settings > AI Processing > App-Aware Style**
+
+## Recommended Settings
+
+For the best experience with Chinese dictation:
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| Engine | **Groq** | Fastest transcription (<1s) |
+| Language | **Mandarin Chinese** | More accurate than Auto for Chinese |
+| LLM Post-Processing | **On** | Cleans up filler words + Traditional Chinese |
+| LLM Model | **Llama 3.3 70B** | Best quality for Chinese text processing |
+| App-Aware Style | **On** | Adapts tone to context |
+
+## Tech Stack
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| App Framework | Tauri 2 | Lightweight desktop app |
+| Audio Capture | cpal | Microphone input → 16kHz mono |
+| Speech-to-Text | whisper-rs / Groq API | Local or cloud transcription |
+| LLM Processing | Groq API (Llama 3.3) | Text cleanup and formatting |
+| Hotkey Detection | CGEventTap (CoreGraphics) | Global modifier key listener |
+| Text Insertion | arboard + rdev | Clipboard write + Cmd+V simulation |
+| App Detection | NSWorkspace (FFI) | Foreground app bundle ID |
+
+## Requirements
+
+- macOS 12.0+ (Apple Silicon recommended for local Whisper)
+- Microphone permission
+- Accessibility permission (for global hotkey + text insertion)
+- Groq API key (free, for cloud engine and LLM features)
 
 ## Privacy
 
@@ -67,7 +130,7 @@ Murmur was born from a security audit of a commercial voice-to-text app that was
 - Send application context to remote servers
 - Include session recording analytics (Microsoft Clarity)
 
-Murmur does none of this. Your audio is processed locally, and the source code is fully auditable.
+Murmur does none of this. When using the **local engine**, your audio never leaves your machine. When using **Groq**, audio is sent only to Groq's API for transcription -- no other data is collected or transmitted.
 
 ## License
 

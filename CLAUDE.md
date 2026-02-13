@@ -14,8 +14,9 @@ pnpm tauri build
 # Rust-only commands (run from src-tauri/)
 cd src-tauri
 cargo check                                       # fast iteration
-cargo clippy --all-targets -- -D warnings          # lint
-cargo test                                         # state machine tests
+cargo clippy --all-targets -- -D warnings          # lint (zero warnings policy)
+cargo test                                         # 6 tests in state.rs
+cargo test test_valid_forward_transitions          # run a single test
 ```
 
 ## Architecture
@@ -36,22 +37,39 @@ Frontend (src/)                    Backend (src-tauri/src/)
                                    └── frontapp.rs   macOS foreground app detection (FFI)
 ```
 
-**IPC**: Frontend calls backend via `invoke("command")`, backend pushes to frontend via `app.emit("event", payload)`.
+**IPC**: Frontend calls backend via `invoke("command")` (uses `window.__TAURI__.core.invoke` via `withGlobalTauri`), backend pushes to frontend via `app.emit("event", payload)`.
 
-**Three windows**: `main` (420x48, always-on-top bottom bar), `settings` (460x560, on-demand), `onboarding` (560x480, first-run only). All must be listed in `src-tauri/capabilities/default.json` to invoke Tauri commands.
+**Three windows**: `main` (420x48, always-on-top bottom bar), `settings` (460x700, on-demand), `onboarding` (560x480, first-run only). All must be listed in `src-tauri/capabilities/default.json` to invoke Tauri commands.
+
+**Frontend is static files** served directly from `src/` (no build step, no bundler). Plain HTML/JS/CSS.
 
 ## Recording Flow
 
 ```
 Hotkey press → CGEventTap → channel → do_start_recording()
-  → AudioRecorder::start() → spawn live transcription thread (peek every 2s)
+  → AudioRecorder::start() → spawn live transcription thread (local engine only, peek every 2s)
 Hotkey release → do_stop_recording()
-  → audio.stop() → whisper.transcribe() → (if LLM enabled) llm.process_text() → clipboard.insert_text(Cmd+V) → emit result → hide window after 2s
+  → audio.stop()
+  → if engine=groq: llm::transcribe_groq() (cloud Whisper API)
+    else: whisper.transcribe() (local Metal GPU)
+  → if llm_enabled: llm::process_text() (Groq LLM, cleans filler words/punctuation/繁簡)
+  → clipboard.insert_text(Cmd+V) → emit result → hide window after 2s
 ```
 
 State machine: `Idle → Starting → Recording → Stopping → Transcribing → [Processing] → Idle`
 
 Two recording modes: **Hold** (press=start, release=stop) and **Toggle** (press toggles, 5-min auto-stop).
+
+## Transcription Engines
+
+- **Local**: whisper-rs with Metal GPU. Live preview enabled. Model stored at `~/Library/Application Support/com.murmur.voice/models/`.
+- **Groq**: Cloud Whisper API (`whisper-large-v3-turbo`). Audio encoded to WAV via `hound`, sent as multipart form. No live preview (too expensive). Same `groq_api_key` used for both Whisper and LLM.
+
+## Anti-Hallucination (Local Whisper)
+
+- `MIN_SAMPLES = 16_000` (1s minimum, shorter clips produce hallucinations)
+- Audio energy check (skip if near-silent)
+- `suppress_blank(true)`, `no_speech_thold(0.6)`, `temperature_inc(0.0)`, `entropy_thold(2.4)`
 
 ## Key Patterns
 
@@ -61,6 +79,14 @@ Two recording modes: **Hold** (press=start, release=stop) and **Toggle** (press 
 - **Settings path**: `~/Library/Application Support/com.murmur.voice/settings.json`
 - **Model path**: `~/Library/Application Support/com.murmur.voice/models/ggml-large-v3-turbo.bin`
 - **PTT keys**: Both legacy format (`left_option`) and JS `event.code` format (`AltLeft`) accepted in `ptt_key_mask()`
+
+## Gotchas
+
+- **New windows** must be added to `src-tauri/capabilities/default.json` `"windows"` array or they can't invoke any Tauri commands
+- **Groq API key** is shared between Whisper transcription and LLM post-processing — stored in `settings.groq_api_key`
+- **`frontapp.rs` uses raw Objective-C FFI** (objc_msgSend) — no crate dependency, but `unsafe` throughout
+- **Live transcription** only runs for local engine; Groq mode skips it entirely (cost)
+- **Toggle mode** checks `app_state.current()` (not a local flag) to decide start/stop — this avoids desync after auto-stop timeout
 
 ## macOS Requirements
 

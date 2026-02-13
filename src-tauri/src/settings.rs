@@ -92,6 +92,22 @@ impl Settings {
             _ => "auto",
         }
     }
+
+    /// Builds the full initial_prompt for Whisper, combining language bias and user dictionary.
+    pub fn whisper_initial_prompt(&self) -> String {
+        let mut parts = Vec::new();
+
+        // Bias Whisper toward Traditional Chinese output when language is zh
+        if self.language == "zh" || self.language == "auto" {
+            parts.push("繁體中文語音轉錄，使用台灣正體中文。".to_string());
+        }
+
+        if !self.dictionary.is_empty() {
+            parts.push(self.dictionary.clone());
+        }
+
+        parts.join(" ")
+    }
 }
 
 fn settings_path() -> PathBuf {

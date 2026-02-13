@@ -29,6 +29,7 @@ const LEGACY_DISPLAY = {
 let currentPttKey = "AltLeft";
 let isRecording = false;
 let recordingMode = "hold";
+let dictTags = [];
 
 const el = (id) => document.getElementById(id);
 
@@ -97,6 +98,56 @@ function showStatus(message, isError) {
   setTimeout(() => { status.textContent = ""; }, 2000);
 }
 
+// --- Dictionary Tag Management ---
+
+function renderDictTags() {
+  const container = el("dict-tags");
+  container.innerHTML = "";
+  dictTags.forEach((term, i) => {
+    const tag = document.createElement("span");
+    tag.className = "dict-tag";
+    tag.textContent = term;
+
+    const x = document.createElement("button");
+    x.className = "dict-tag-x";
+    x.textContent = "\u00d7";
+    x.addEventListener("click", () => removeDictTag(i));
+
+    tag.appendChild(x);
+    container.appendChild(tag);
+  });
+
+  const count = el("dict-count");
+  count.textContent = dictTags.length > 0 ? dictTags.length + " terms" : "";
+}
+
+function addDictTag(term) {
+  const cleaned = term.trim();
+  if (!cleaned) return;
+  if (dictTags.includes(cleaned)) return; // no duplicates
+  dictTags.push(cleaned);
+  renderDictTags();
+}
+
+function removeDictTag(index) {
+  dictTags.splice(index, 1);
+  renderDictTags();
+}
+
+function getDictString() {
+  return dictTags.join(", ");
+}
+
+function loadDictFromString(str) {
+  dictTags = (str || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  renderDictTags();
+}
+
+// --- Init ---
+
 window.addEventListener("DOMContentLoaded", async () => {
   // Load settings
   try {
@@ -110,7 +161,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     el("opacity-value").textContent = Math.round(s.window_opacity * 100) + "%";
     el("auto-start").checked = s.auto_start;
     setRecordingMode(s.recording_mode || "hold");
-    el("dictionary").value = s.dictionary || "";
+    loadDictFromString(s.dictionary || "");
     el("llm-enabled").checked = s.llm_enabled || false;
     el("llm-model").value = s.llm_model || "llama-3.3-70b-versatile";
     el("app-aware-style").checked = s.app_aware_style !== false;
@@ -143,6 +194,29 @@ window.addEventListener("DOMContentLoaded", async () => {
     btn.addEventListener("click", () => setRecordingMode(btn.dataset.value));
   });
 
+  // Dictionary input — Enter or comma to add tag
+  el("dict-input").addEventListener("keydown", (e) => {
+    if (e.code === "Enter" || e.key === ",") {
+      e.preventDefault();
+      const input = el("dict-input");
+      addDictTag(input.value.replace(",", ""));
+      input.value = "";
+    }
+    // Backspace on empty input removes last tag
+    if (e.code === "Backspace" && el("dict-input").value === "" && dictTags.length > 0) {
+      removeDictTag(dictTags.length - 1);
+    }
+  });
+
+  // Also add on blur (if user typed something and clicked away)
+  el("dict-input").addEventListener("blur", () => {
+    const input = el("dict-input");
+    if (input.value.trim()) {
+      addDictTag(input.value);
+      input.value = "";
+    }
+  });
+
   // Opacity slider
   el("opacity").addEventListener("input", () => {
     el("opacity-value").textContent = Math.round(el("opacity").value * 100) + "%";
@@ -159,7 +233,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       window_opacity: parseFloat(el("opacity").value),
       auto_start: el("auto-start").checked,
       recording_mode: recordingMode,
-      dictionary: el("dictionary").value,
+      dictionary: getDictString(),
       llm_enabled: el("llm-enabled").checked,
       llm_model: el("llm-model").value,
       app_aware_style: el("app-aware-style").checked,

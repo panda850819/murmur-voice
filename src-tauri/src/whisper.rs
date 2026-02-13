@@ -1,7 +1,7 @@
 use thiserror::Error;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-const MIN_SAMPLES: usize = 3_200; // 0.2s at 16kHz
+const MIN_SAMPLES: usize = 16_000; // 1s at 16kHz — shorter clips produce hallucinations
 
 #[derive(Debug, Error)]
 pub(crate) enum WhisperError {
@@ -49,6 +49,12 @@ impl TranscriptionEngine {
             .create_state()
             .map_err(|e| WhisperError::StateCreate(e.to_string()))?;
 
+        // Check if audio has enough energy (not just silence)
+        let energy: f32 = samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32;
+        if energy < 1e-6 {
+            return Ok(String::new());
+        }
+
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
         params.set_n_threads(4);
         params.set_language(Some(language));
@@ -56,6 +62,12 @@ impl TranscriptionEngine {
         params.set_print_realtime(false);
         params.set_print_special(false);
         params.set_print_timestamps(false);
+
+        // Anti-hallucination settings
+        params.set_suppress_blank(true);
+        params.set_no_speech_thold(0.6);
+        params.set_temperature_inc(0.0); // disable temperature fallback — it just produces more hallucinations
+        params.set_entropy_thold(2.4);   // reject segments with high entropy (uncertain/hallucinated)
 
         if !initial_prompt.is_empty() {
             params.set_initial_prompt(initial_prompt);

@@ -36,7 +36,7 @@
             <select id="language">
               <option value="auto">Auto Detect</option>
               <option value="en">English</option>
-              <option value="zh">Chinese</option>
+              <option value="zh">Mandarin Chinese (中文)</option>
               <option value="ja">Japanese</option>
               <option value="ko">Korean</option>
               <option value="fr">French</option>
@@ -71,9 +71,15 @@
             <span class="row-label">API Key</span>
             <input type="password" id="groq-api-key" placeholder="gsk_..." spellcheck="false" />
           </div>
-          <div class="row">
-            <span class="row-label">Dictionary</span>
-            <input type="text" id="dictionary" placeholder="term1, term2, ..." spellcheck="false" />
+          <div class="dict-section">
+            <div class="row">
+              <span class="row-label">Dictionary</span>
+              <span class="dict-count" id="dict-count"></span>
+            </div>
+            <div class="dict-input-wrap">
+              <div class="dict-tags" id="dict-tags"></div>
+              <input type="text" id="dict-input" class="dict-input" placeholder="Type a term and press Enter" spellcheck="false" />
+            </div>
           </div>
         </div>
       </section>
@@ -111,8 +117,8 @@
           <div class="row">
             <span class="row-label">Mode</span>
             <div class="segmented" id="recording-mode">
-              <button data-value="hold" class="seg-btn active">Hold</button>
-              <button data-value="toggle" class="seg-btn">Toggle</button>
+              <button data-value="hold" class="seg-btn active">Hold to Talk</button>
+              <button data-value="toggle" class="seg-btn">Press to Toggle</button>
             </div>
           </div>
         </div>
