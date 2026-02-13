@@ -6,6 +6,7 @@ const statusText = () => document.getElementById("status-text");
 const transcription = () => document.getElementById("transcription");
 const progressContainer = () => document.getElementById("progress-container");
 const progressBar = () => document.getElementById("progress-bar");
+const appBadge = () => document.getElementById("app-badge");
 
 function setStatus(state, text) {
   const dot = statusDot();
@@ -48,8 +49,13 @@ window.addEventListener("DOMContentLoaded", async () => {
       case "transcribing":
         setStatus("transcribing", "Transcribing...");
         break;
+      case "processing":
+        setStatus("transcribing", "Processing...");
+        break;
       case "idle":
         setStatus(null, "Ready");
+        appBadge().classList.remove("visible");
+        appBadge().textContent = "";
         break;
     }
   });
@@ -67,6 +73,15 @@ window.addEventListener("DOMContentLoaded", async () => {
     setTimeout(() => {
       setStatus(null, "Ready");
     }, 2000);
+  });
+
+  await listen("foreground_app_info", (event) => {
+    const { name } = event.payload;
+    const badge = appBadge();
+    if (name && name !== "Unknown") {
+      badge.textContent = name;
+      badge.classList.add("visible");
+    }
   });
 
   await listen("opacity_changed", (event) => {

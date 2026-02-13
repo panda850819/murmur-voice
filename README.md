@@ -17,6 +17,7 @@ Murmur is a voice dictation tool that transcribes your speech and inserts polish
 - **LLM Post-Processing** -- Clean up filler words, add punctuation, Simplified-to-Traditional Chinese conversion via Groq LLM
 - **App-Aware Style** -- Automatically adjusts output tone based on the active app (e.g. formal in Slack, technical in VS Code)
 - **Personal Dictionary** -- Add custom terms to improve transcription accuracy
+- **Transcription Preview** -- Floating preview window shows full transcription result with live updates, character count, and detected app name
 - **Live Preview** -- See partial transcription while you speak (local engine only)
 - **15 Languages** -- Auto-detect or manually select from 15 supported languages
 - **System-wide** -- Works in any text field across all apps
@@ -113,7 +114,7 @@ For the best experience with Chinese dictation:
 | LLM Processing | Groq API (Llama 3.3) | Text cleanup and formatting |
 | Hotkey Detection | CGEventTap (CoreGraphics) | Global modifier key listener |
 | Text Insertion | arboard + rdev | Clipboard write + Cmd+V simulation |
-| App Detection | NSWorkspace (FFI) | Foreground app bundle ID |
+| App Detection | NSWorkspace (FFI) | Foreground app bundle ID + display name |
 
 ## Requirements
 

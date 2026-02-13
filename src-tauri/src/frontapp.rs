@@ -47,6 +47,30 @@ pub(crate) fn foreground_app_bundle_id() -> Option<String> {
     }
 }
 
+/// Maps a foreground app's bundle ID to a human-readable display name.
+pub(crate) fn display_name_for_app(bundle_id: &str) -> &'static str {
+    match bundle_id {
+        "com.apple.mail" => "Mail",
+        "com.microsoft.Outlook" => "Outlook",
+        "com.google.Gmail" => "Gmail",
+        "com.tinyspeck.slackmacgap" => "Slack",
+        "com.apple.MobileSMS" => "Messages",
+        "com.facebook.archon" => "Messenger",
+        "ru.keepcoder.Telegram" => "Telegram",
+        "net.whatsapp.WhatsApp" => "WhatsApp",
+        "com.hnc.Discord" => "Discord",
+        "com.microsoft.VSCode" => "VS Code",
+        "com.apple.dt.Xcode" => "Xcode",
+        "com.jetbrains.intellij" => "IntelliJ",
+        "dev.zed.Zed" => "Zed",
+        "com.sublimetext.4" => "Sublime Text",
+        "com.todesktop.230313mzl4w4u92" => "Cursor",
+        "com.googlecode.iterm2" => "iTerm2",
+        "com.apple.Terminal" => "Terminal",
+        _ => "Unknown",
+    }
+}
+
 /// Maps a foreground app's bundle ID to a writing style preset.
 pub(crate) fn style_for_app(bundle_id: &str) -> &'static str {
     match bundle_id {

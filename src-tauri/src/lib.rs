@@ -8,7 +8,7 @@ mod settings;
 mod state;
 mod whisper;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
@@ -18,6 +18,9 @@ pub(crate) struct MurmurState {
     engine: Mutex<Option<whisper::TranscriptionEngine>>,
     settings: Mutex<settings::Settings>,
     live_stop: AtomicBool,
+    /// Generation counter for preview auto-hide timer cancellation.
+    /// Incremented on each new recording; stale timers compare and bail out.
+    preview_generation: AtomicU64,
 }
 
 fn show_main_window(app: &tauri::AppHandle) {
@@ -32,10 +35,43 @@ fn hide_main_window(app: &tauri::AppHandle) {
     }
 }
 
+fn show_preview_window(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("preview") {
+        // Position preview directly above the main bar
+        if let Some(main_win) = app.get_webview_window("main") {
+            if let Ok(main_pos) = main_win.outer_position() {
+                let preview_h = 280.0;
+                let gap = 8.0;
+                let scale = main_win
+                    .current_monitor()
+                    .ok()
+                    .flatten()
+                    .map(|m| m.scale_factor())
+                    .unwrap_or(1.0);
+                let new_y = main_pos.y as f64 - (preview_h + gap) * scale;
+                use tauri::PhysicalPosition;
+                let _ = w.set_position(PhysicalPosition::new(main_pos.x, new_y as i32));
+            }
+        }
+        let _ = w.show();
+        // Do not call set_focus — preview must not steal focus
+    }
+}
+
+fn hide_preview_window(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("preview") {
+        let _ = w.hide();
+    }
+}
+
 fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<MurmurState>();
 
+    // Cancel any pending preview auto-hide timer
+    state.preview_generation.fetch_add(1, Ordering::SeqCst);
+
     show_main_window(app);
+    show_preview_window(app);
 
     state
         .app_state
@@ -49,6 +85,7 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
         let _ = app.emit("recording_state_changed", "idle");
         let _ = app.emit("recording_error", e.to_string());
         hide_main_window(app);
+        hide_preview_window(app);
         return Err(e.to_string());
     }
 
@@ -177,6 +214,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         let _ = state.app_state.transition(state::RecordingState::Idle);
         let _ = app.emit("recording_state_changed", "idle");
         hide_main_window(app);
+        hide_preview_window(app);
         return Ok(String::new());
     }
 
@@ -184,6 +222,25 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         .app_state
         .transition(state::RecordingState::Transcribing);
     let _ = app.emit("recording_state_changed", "transcribing");
+
+    // Emit foreground app info for the frontend (preview window + main bar badge)
+    {
+        let app_aware = state
+            .settings
+            .lock()
+            .map(|s| s.app_aware_style)
+            .unwrap_or(false);
+        if app_aware {
+            let (name, style) = frontapp::foreground_app_bundle_id()
+                .as_deref()
+                .map(|bid| (frontapp::display_name_for_app(bid), frontapp::style_for_app(bid)))
+                .unwrap_or(("Unknown", "default"));
+            let _ = app.emit(
+                "foreground_app_info",
+                serde_json::json!({ "name": name, "style": style }),
+            );
+        }
+    }
 
     let (engine_type, language, initial_prompt, api_key_for_whisper) = state
         .settings
@@ -269,11 +326,17 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
     let _ = app.emit("recording_state_changed", "idle");
     let _ = app.emit("transcription_complete", &text);
 
-    // Hide main window after a brief delay so user sees the result
+    // Auto-hide main + preview windows after 3 seconds (minimum 1s display).
+    // The generation counter cancels this timer if a new recording starts.
+    let generation = state.preview_generation.load(Ordering::SeqCst);
     let app_clone = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(2));
-        hide_main_window(&app_clone);
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        let ms = app_clone.state::<MurmurState>();
+        if ms.preview_generation.load(Ordering::SeqCst) == generation {
+            hide_preview_window(&app_clone);
+            hide_main_window(&app_clone);
+        }
     });
 
     Ok(text)
@@ -388,6 +451,11 @@ fn complete_onboarding(
 }
 
 #[tauri::command]
+fn hide_preview(app: tauri::AppHandle) {
+    hide_preview_window(&app);
+}
+
+#[tauri::command]
 fn open_settings(app: tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("settings") {
         let _ = w.set_focus();
@@ -424,6 +492,7 @@ pub fn run() {
             engine: Mutex::new(None),
             settings: Mutex::new(initial_settings),
             live_stop: AtomicBool::new(false),
+            preview_generation: AtomicU64::new(0),
         })
         .invoke_handler(tauri::generate_handler![
             get_recording_state,
@@ -434,6 +503,7 @@ pub fn run() {
             get_settings,
             save_settings,
             open_settings,
+            hide_preview,
             complete_onboarding,
         ])
         .setup(|app| {
@@ -491,6 +561,26 @@ pub fn run() {
                         (x * scale) as i32,
                         (y * scale) as i32,
                     ));
+                }
+            }
+
+            // Position preview window above main bar (hidden by default)
+            if let (Some(main_win), Some(preview_win)) = (
+                app.get_webview_window("main"),
+                app.get_webview_window("preview"),
+            ) {
+                if let Ok(main_pos) = main_win.outer_position() {
+                    let preview_h = 280.0;
+                    let gap = 8.0;
+                    let scale = main_win
+                        .current_monitor()
+                        .ok()
+                        .flatten()
+                        .map(|m| m.scale_factor())
+                        .unwrap_or(1.0);
+                    let new_y = main_pos.y as f64 - (preview_h + gap) * scale;
+                    use tauri::PhysicalPosition;
+                    let _ = preview_win.set_position(PhysicalPosition::new(main_pos.x, new_y as i32));
                 }
             }
 

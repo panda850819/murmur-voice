@@ -1,0 +1,121 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  overflow: hidden;
+  background: transparent;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  height: 100%;
+}
+
+#preview {
+  background: rgba(20, 20, 30, 0.78);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: 14px;
+  margin: 4px;
+  height: calc(100vh - 8px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* -- Header -- */
+
+.preview-header {
+  padding: 12px 16px 0;
+  flex-shrink: 0;
+}
+
+.header-text {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* -- Body -- */
+
+.preview-body {
+  flex: 1;
+  padding: 10px 16px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.preview-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.preview-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.preview-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+.preview-text {
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.preview-text.placeholder {
+  color: rgba(255, 255, 255, 0.35);
+  font-style: italic;
+}
+
+.preview-text.no-speech {
+  color: rgba(255, 255, 255, 0.3);
+  font-style: italic;
+  text-align: center;
+  padding-top: 40px;
+}
+
+/* -- Footer -- */
+
+.preview-footer {
+  padding: 0 16px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  min-height: 24px;
+}
+
+.char-count {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-badge {
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 10px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: none;
+}
+
+.app-badge.visible {
+  display: inline-block;
+}
+
+/* Processing state handled by JS (appends animated dots to header text) */
