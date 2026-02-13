@@ -11,14 +11,11 @@ pnpm tauri dev
 # Production build
 pnpm tauri build
 
-# Rust-only check (fast iteration, no frontend)
-cargo check --manifest-path src-tauri/Cargo.toml
-
-# Lint
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-
-# Run tests (state machine tests in state.rs)
-cargo test --manifest-path src-tauri/Cargo.toml
+# Rust-only commands (run from src-tauri/)
+cd src-tauri
+cargo check                                       # fast iteration
+cargo clippy --all-targets -- -D warnings          # lint
+cargo test                                         # state machine tests
 ```
 
 ## Architecture

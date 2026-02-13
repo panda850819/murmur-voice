@@ -10,9 +10,10 @@ Murmur is a local-first voice dictation tool that transcribes your speech and in
 
 ## Features
 
-- **Push-to-Talk** -- Hold a hotkey to speak, release to insert text
+- **Push-to-Talk** -- Hold a modifier key to speak, release to insert text
+- **Custom Hotkey** -- Choose any modifier key (Option, Command, Shift, Control, left or right)
 - **Local Transcription** -- Runs Whisper on-device via whisper-rs (Metal accelerated on Apple Silicon)
-- **AI Polish** -- Optional text refinement via local LLM (Ollama) or Groq API (text-only, no audio sent)
+- **Live Preview** -- See partial transcription while you speak
 - **System-wide** -- Works in any text field across all apps
 - **Lightweight** -- Tauri-based, ~30-50MB vs 200MB+ Electron apps
 - **Open Source** -- Fully auditable, no telemetry, no tracking
@@ -20,22 +21,20 @@ Murmur is a local-first voice dictation tool that transcribes your speech and in
 ## Architecture
 
 ```
-Hotkey (rdev) -> Record (cpal) -> Transcribe (whisper-rs) -> Polish (LLM) -> Insert (enigo)
+Hotkey (CGEventTap) -> Record (cpal) -> Transcribe (whisper-rs) -> Insert (clipboard + Cmd+V)
 ```
 
-All audio processing happens locally. If you opt into LLM polishing via cloud API, only the transcribed text is sent -- never your audio.
+All audio processing happens locally.
 
 ## Tech Stack
 
 | Component | Crate | Purpose |
 |-----------|-------|---------|
-| App Framework | `tauri` | Lightweight desktop app |
-| Audio Capture | `cpal` | Cross-platform microphone input |
-| Speech-to-Text | `whisper-rs` | Local Whisper inference (Metal/CoreML) |
-| Hotkey Detection | `rdev` | Global keyboard event listener |
-| Text Insertion | `enigo` | Simulate typing at cursor position |
-| Clipboard | `arboard` | Fallback text insertion |
-| LLM Polish | `ollama-rs` / `reqwest` | Optional text refinement |
+| App Framework | `tauri` 2 | Lightweight desktop app |
+| Audio Capture | `cpal` | Microphone input |
+| Speech-to-Text | `whisper-rs` | Local Whisper inference (Metal) |
+| Hotkey Detection | CGEventTap (CoreGraphics FFI) | Global modifier key listener |
+| Text Insertion | `arboard` + `rdev` | Clipboard write + Cmd+V simulation |
 
 ## Requirements
 
@@ -46,22 +45,18 @@ All audio processing happens locally. If you opt into LLM polishing via cloud AP
 ## Getting Started
 
 ```bash
-# Clone
 git clone https://github.com/panda850819/murmur-voice.git
 cd murmur-voice
-
-# Install dependencies
-cargo build --release
-
-# Run
-cargo run --release
+pnpm install
+pnpm tauri dev
 ```
 
 ## Roadmap
 
-- [ ] Groq API integration (text-only cloud transcription)
 - [ ] LLM text polishing (local Ollama / Groq)
-- [ ] Windows support (replace CGEventTap with SetWindowsHookEx, CUDA fallback for Whisper)
+- [ ] Multiple language model sizes (currently large-v3-turbo only)
+- [ ] Auto-start at login
+- [ ] Windows support
 - [ ] Linux support
 
 ## Privacy
