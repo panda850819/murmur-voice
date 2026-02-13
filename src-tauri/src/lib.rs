@@ -1,6 +1,8 @@
 mod audio;
 mod clipboard;
+mod frontapp;
 mod hotkey;
+mod llm;
 mod model;
 mod settings;
 mod state;
@@ -18,8 +20,22 @@ pub(crate) struct MurmurState {
     live_stop: AtomicBool,
 }
 
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+    }
+}
+
+fn hide_main_window(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+}
+
 fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<MurmurState>();
+
+    show_main_window(app);
 
     state
         .app_state
@@ -32,6 +48,7 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
         let _ = state.app_state.transition(state::RecordingState::Idle);
         let _ = app.emit("recording_state_changed", "idle");
         let _ = app.emit("recording_error", e.to_string());
+        hide_main_window(app);
         return Err(e.to_string());
     }
 
@@ -45,6 +62,23 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
         .app_state
         .transition(state::RecordingState::Recording);
     let _ = app.emit("recording_state_changed", "recording");
+
+    // Auto-stop after 5 minutes in toggle mode
+    let mode = state
+        .settings
+        .lock()
+        .map(|s| s.recording_mode.clone())
+        .unwrap_or_default();
+    if mode == "toggle" {
+        let app_timeout = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(300));
+            let ms = app_timeout.state::<MurmurState>();
+            if ms.app_state.current() == state::RecordingState::Recording {
+                let _ = do_stop_recording(&app_timeout);
+            }
+        });
+    }
 
     // Start live transcription thread
     state.live_stop.store(false, Ordering::SeqCst);
@@ -74,11 +108,11 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
                 continue;
             }
 
-            let language = ms
+            let (language, dictionary) = ms
                 .settings
                 .lock()
-                .map(|s| s.whisper_language().to_string())
-                .unwrap_or_else(|_| "auto".to_string());
+                .map(|s| (s.whisper_language().to_string(), s.dictionary.clone()))
+                .unwrap_or_else(|_| ("auto".to_string(), String::new()));
 
             let text = {
                 let engine_lock = match ms.engine.try_lock() {
@@ -89,7 +123,7 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
                     }
                 };
                 match engine_lock.as_ref() {
-                    Some(engine) => engine.transcribe(&samples, &language).unwrap_or_default(),
+                    Some(engine) => engine.transcribe(&samples, &language, &dictionary).unwrap_or_default(),
                     None => break,
                 }
             };
@@ -134,6 +168,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
     if samples.is_empty() {
         let _ = state.app_state.transition(state::RecordingState::Idle);
         let _ = app.emit("recording_state_changed", "idle");
+        hide_main_window(app);
         return Ok(String::new());
     }
 
@@ -142,21 +177,61 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         .transition(state::RecordingState::Transcribing);
     let _ = app.emit("recording_state_changed", "transcribing");
 
-    let language = state
+    let (language, dictionary) = state
         .settings
         .lock()
-        .map(|s| s.whisper_language().to_string())
-        .unwrap_or_else(|_| "auto".to_string());
+        .map(|s| (s.whisper_language().to_string(), s.dictionary.clone()))
+        .unwrap_or_else(|_| ("auto".to_string(), String::new()));
 
-    let text = {
+    let raw_text = {
         let engine_lock = state
             .engine
             .lock()
             .map_err(|e| format!("engine mutex poisoned: {e}"))?;
         match engine_lock.as_ref() {
-            Some(engine) => engine.transcribe(&samples, &language).map_err(|e| e.to_string())?,
+            Some(engine) => engine.transcribe(&samples, &language, &dictionary).map_err(|e| e.to_string())?,
             None => return Err("whisper engine not loaded".to_string()),
         }
+    };
+
+    // LLM post-processing (if enabled and API key present)
+    let (llm_enabled, api_key, llm_model, app_aware_style) = state
+        .settings
+        .lock()
+        .map(|s| (
+            s.llm_enabled,
+            s.groq_api_key.clone(),
+            s.llm_model.clone(),
+            s.app_aware_style,
+        ))
+        .unwrap_or_else(|_| (false, String::new(), String::new(), false));
+
+    let text = if llm_enabled && !api_key.is_empty() && !raw_text.is_empty() {
+        let _ = state
+            .app_state
+            .transition(state::RecordingState::Processing);
+        let _ = app.emit("recording_state_changed", "processing");
+
+        let style = if app_aware_style {
+            frontapp::foreground_app_bundle_id()
+                .as_deref()
+                .map(frontapp::style_for_app)
+                .unwrap_or("default")
+        } else {
+            "default"
+        };
+
+        let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+        match rt.block_on(llm::process_text(&api_key, &llm_model, &raw_text, style)) {
+            Ok(processed) => processed,
+            Err(e) => {
+                log::error!("LLM post-processing failed: {}", e);
+                let _ = app.emit("recording_error", format!("LLM processing failed, using raw text: {e}"));
+                raw_text
+            }
+        }
+    } else {
+        raw_text
     };
 
     if !text.is_empty() {
@@ -169,6 +244,13 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
     let _ = state.app_state.transition(state::RecordingState::Idle);
     let _ = app.emit("recording_state_changed", "idle");
     let _ = app.emit("transcription_complete", &text);
+
+    // Hide main window after a brief delay so user sees the result
+    let app_clone = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        hide_main_window(&app_clone);
+    });
 
     Ok(text)
 }
@@ -292,7 +374,7 @@ fn open_settings(app: tauri::AppHandle) {
             tauri::WebviewUrl::App("settings.html".into()),
         )
         .title("Murmur Voice Settings")
-        .inner_size(460.0, 560.0)
+        .inner_size(460.0, 680.0)
         .resizable(false)
         .build();
     }
@@ -419,26 +501,73 @@ pub fn run() {
             std::thread::spawn(move || {
                 let mut is_recording = false;
                 while let Ok(event) = receiver.recv() {
+                    let mode = {
+                        let ms = app_handle.state::<MurmurState>();
+                        ms.settings
+                            .lock()
+                            .map(|s| s.recording_mode.clone())
+                            .unwrap_or_else(|_| "hold".to_string())
+                    };
+
                     match event {
                         hotkey::HotkeyEvent::Pressed => {
-                            if is_recording {
-                                continue;
-                            }
-                            let murmur_state = app_handle.state::<MurmurState>();
-                            if murmur_state.app_state.current() != state::RecordingState::Idle {
-                                continue;
-                            }
-                            match do_start_recording(&app_handle) {
-                                Ok(()) => {
-                                    is_recording = true;
+                            match mode.as_str() {
+                                "toggle" => {
+                                    if is_recording {
+                                        is_recording = false;
+                                        if let Err(e) = do_stop_recording(&app_handle) {
+                                            log::error!("failed to stop recording: {}", e);
+                                            let murmur_state = app_handle.state::<MurmurState>();
+                                            let _ = murmur_state
+                                                .app_state
+                                                .transition(state::RecordingState::Idle);
+                                            let _ = app_handle
+                                                .emit("recording_state_changed", "idle");
+                                        }
+                                    } else {
+                                        let murmur_state = app_handle.state::<MurmurState>();
+                                        if murmur_state.app_state.current()
+                                            != state::RecordingState::Idle
+                                        {
+                                            continue;
+                                        }
+                                        match do_start_recording(&app_handle) {
+                                            Ok(()) => {
+                                                is_recording = true;
+                                            }
+                                            Err(e) => {
+                                                log::error!(
+                                                    "failed to start recording: {}",
+                                                    e
+                                                );
+                                            }
+                                        }
+                                    }
                                 }
-                                Err(e) => {
-                                    log::error!("failed to start recording: {}", e);
+                                _ => {
+                                    // Hold mode (default behavior)
+                                    if is_recording {
+                                        continue;
+                                    }
+                                    let murmur_state = app_handle.state::<MurmurState>();
+                                    if murmur_state.app_state.current()
+                                        != state::RecordingState::Idle
+                                    {
+                                        continue;
+                                    }
+                                    match do_start_recording(&app_handle) {
+                                        Ok(()) => {
+                                            is_recording = true;
+                                        }
+                                        Err(e) => {
+                                            log::error!("failed to start recording: {}", e);
+                                        }
+                                    }
                                 }
                             }
                         }
                         hotkey::HotkeyEvent::Released => {
-                            if !is_recording {
+                            if mode == "toggle" || !is_recording {
                                 continue;
                             }
                             is_recording = false;

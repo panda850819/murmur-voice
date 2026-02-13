@@ -28,6 +28,7 @@ const LEGACY_DISPLAY = {
 // State
 let currentPttKey = "AltLeft";
 let isRecording = false;
+let recordingMode = "hold";
 
 const el = (id) => document.getElementById(id);
 
@@ -70,10 +71,23 @@ function handleKeyDown(e) {
   }
 }
 
+function setRecordingMode(mode) {
+  recordingMode = mode;
+  const btns = document.querySelectorAll("#recording-mode .seg-btn");
+  btns.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.value === mode);
+  });
+}
+
 function updateEngineVisibility() {
   const isLocal = el("engine").value === "local";
   el("model-section").style.display = isLocal ? "flex" : "none";
   el("groq-section").style.display = isLocal ? "none" : "flex";
+}
+
+function updateLlmVisibility() {
+  const enabled = el("llm-enabled").checked;
+  el("llm-model-section").style.display = enabled ? "flex" : "none";
 }
 
 function showStatus(message, isError) {
@@ -95,7 +109,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     el("opacity").value = s.window_opacity;
     el("opacity-value").textContent = Math.round(s.window_opacity * 100) + "%";
     el("auto-start").checked = s.auto_start;
+    setRecordingMode(s.recording_mode || "hold");
+    el("dictionary").value = s.dictionary || "";
+    el("llm-enabled").checked = s.llm_enabled || false;
+    el("llm-model").value = s.llm_model || "llama-3.3-70b-versatile";
+    el("app-aware-style").checked = s.app_aware_style !== false;
     updateEngineVisibility();
+    updateLlmVisibility();
   } catch (e) {
     showStatus("Failed to load settings", true);
   }
@@ -115,6 +135,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Engine toggle
   el("engine").addEventListener("change", updateEngineVisibility);
 
+  // LLM toggle
+  el("llm-enabled").addEventListener("change", updateLlmVisibility);
+
+  // Recording mode segmented control
+  document.querySelectorAll("#recording-mode .seg-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setRecordingMode(btn.dataset.value));
+  });
+
   // Opacity slider
   el("opacity").addEventListener("input", () => {
     el("opacity-value").textContent = Math.round(el("opacity").value * 100) + "%";
@@ -130,6 +158,11 @@ window.addEventListener("DOMContentLoaded", async () => {
       groq_api_key: el("groq-api-key").value,
       window_opacity: parseFloat(el("opacity").value),
       auto_start: el("auto-start").checked,
+      recording_mode: recordingMode,
+      dictionary: el("dictionary").value,
+      llm_enabled: el("llm-enabled").checked,
+      llm_model: el("llm-model").value,
+      app_aware_style: el("app-aware-style").checked,
     };
 
     try {

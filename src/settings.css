@@ -45,7 +45,8 @@ html, body {
   -webkit-font-smoothing: antialiased;
   color: var(--text-primary);
   height: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* ── Layout ── */
@@ -193,7 +194,36 @@ select option {
   color: var(--text-primary);
 }
 
+/* ── Segmented Control ── */
+
+.segmented { display: flex; background: var(--bg-elevated); border-radius: 6px; padding: 2px; gap: 1px; }
+.seg-btn { font-family: inherit; font-size: 11px; font-weight: 500; padding: 4px 9px; border: none; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s ease; white-space: nowrap; }
+.seg-btn:hover { color: var(--text-secondary); }
+.seg-btn.active { background: var(--accent); color: #fff; box-shadow: 0 1px 4px rgba(108, 92, 231, 0.25); }
+
 /* ── Text Input ── */
+
+input[type="text"] {
+  font-family: inherit;
+  appearance: none;
+  background: var(--bg-elevated);
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  color: var(--text-primary);
+  font-size: 11px;
+  outline: none;
+  transition: box-shadow 0.15s;
+  width: 180px;
+}
+
+input[type="text"]:focus {
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+input[type="text"]::placeholder {
+  color: var(--text-muted);
+}
 
 input[type="password"] {
   font-family: "SF Mono", "Menlo", monospace;

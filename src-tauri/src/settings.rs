@@ -1,6 +1,18 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+fn default_hold() -> String {
+    "hold".to_string()
+}
+
+fn default_llm_model() -> String {
+    "llama-3.3-70b-versatile".to_string()
+}
+
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Settings {
     pub ptt_key: String,
@@ -12,6 +24,16 @@ pub(crate) struct Settings {
     pub auto_start: bool,
     #[serde(default)]
     pub onboarding_complete: bool,
+    #[serde(default = "default_hold")]
+    pub recording_mode: String,
+    #[serde(default)]
+    pub dictionary: String,
+    #[serde(default)]
+    pub llm_enabled: bool,
+    #[serde(default = "default_llm_model")]
+    pub llm_model: String,
+    #[serde(default = "default_true")]
+    pub app_aware_style: bool,
 }
 
 impl Default for Settings {
@@ -25,6 +47,11 @@ impl Default for Settings {
             window_opacity: 0.78,
             auto_start: false,
             onboarding_complete: false,
+            recording_mode: "hold".to_string(),
+            dictionary: String::new(),
+            llm_enabled: false,
+            llm_model: default_llm_model(),
+            app_aware_style: true,
         }
     }
 }
@@ -50,6 +77,18 @@ impl Settings {
         match self.language.as_str() {
             "zh" => "zh",
             "en" => "en",
+            "ja" => "ja",
+            "ko" => "ko",
+            "fr" => "fr",
+            "de" => "de",
+            "es" => "es",
+            "pt" => "pt",
+            "ru" => "ru",
+            "ar" => "ar",
+            "hi" => "hi",
+            "th" => "th",
+            "vi" => "vi",
+            "id" => "id",
             _ => "auto",
         }
     }

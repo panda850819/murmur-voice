@@ -39,7 +39,7 @@ impl TranscriptionEngine {
         Ok(Self { ctx })
     }
 
-    pub(crate) fn transcribe(&self, samples: &[f32], language: &str) -> Result<String, WhisperError> {
+    pub(crate) fn transcribe(&self, samples: &[f32], language: &str, initial_prompt: &str) -> Result<String, WhisperError> {
         if samples.len() < MIN_SAMPLES {
             return Ok(String::new());
         }
@@ -56,6 +56,10 @@ impl TranscriptionEngine {
         params.set_print_realtime(false);
         params.set_print_special(false);
         params.set_print_timestamps(false);
+
+        if !initial_prompt.is_empty() {
+            params.set_initial_prompt(initial_prompt);
+        }
 
         state
             .full(params, samples)

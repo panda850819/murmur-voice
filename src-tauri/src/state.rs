@@ -8,6 +8,7 @@ pub(crate) enum RecordingState {
     Recording,
     Stopping,
     Transcribing,
+    Processing,
 }
 
 impl std::fmt::Display for RecordingState {
@@ -18,6 +19,7 @@ impl std::fmt::Display for RecordingState {
             RecordingState::Recording => write!(f, "recording"),
             RecordingState::Stopping => write!(f, "stopping"),
             RecordingState::Transcribing => write!(f, "transcribing"),
+            RecordingState::Processing => write!(f, "processing"),
         }
     }
 }
@@ -77,7 +79,9 @@ impl AppState {
                 | (RecordingState::Starting, RecordingState::Recording)
                 | (RecordingState::Recording, RecordingState::Stopping)
                 | (RecordingState::Stopping, RecordingState::Transcribing)
+                | (RecordingState::Transcribing, RecordingState::Processing)
                 | (RecordingState::Transcribing, RecordingState::Idle)
+                | (RecordingState::Processing, RecordingState::Idle)
         )
     }
 }
@@ -108,6 +112,9 @@ mod tests {
         assert!(state.transition(RecordingState::Transcribing).is_ok());
         assert_eq!(state.current(), RecordingState::Transcribing);
 
+        assert!(state.transition(RecordingState::Processing).is_ok());
+        assert_eq!(state.current(), RecordingState::Processing);
+
         assert!(state.transition(RecordingState::Idle).is_ok());
         assert_eq!(state.current(), RecordingState::Idle);
     }
@@ -124,6 +131,9 @@ mod tests {
 
         // Idle -> Transcribing
         assert!(state.transition(RecordingState::Transcribing).is_err());
+
+        // Idle -> Processing
+        assert!(state.transition(RecordingState::Processing).is_err());
     }
 
     #[test]
@@ -151,6 +161,14 @@ mod tests {
         state.transition(RecordingState::Stopping).unwrap();
         state.transition(RecordingState::Transcribing).unwrap();
         assert!(state.transition(RecordingState::Idle).is_ok());
+
+        // Processing -> Idle
+        state.transition(RecordingState::Starting).unwrap();
+        state.transition(RecordingState::Recording).unwrap();
+        state.transition(RecordingState::Stopping).unwrap();
+        state.transition(RecordingState::Transcribing).unwrap();
+        state.transition(RecordingState::Processing).unwrap();
+        assert!(state.transition(RecordingState::Idle).is_ok());
     }
 
     #[test]
@@ -170,5 +188,6 @@ mod tests {
         assert_eq!(RecordingState::Recording.to_string(), "recording");
         assert_eq!(RecordingState::Stopping.to_string(), "stopping");
         assert_eq!(RecordingState::Transcribing.to_string(), "transcribing");
+        assert_eq!(RecordingState::Processing.to_string(), "processing");
     }
 }
