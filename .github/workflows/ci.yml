@@ -8,7 +8,10 @@ on:
 
 jobs:
   check-macos:
-    runs-on: macos-latest
+    # macos-14 (M1) to avoid whisper-rs-sys i8mm build failure on newer runners.
+    # whisper-rs archived on GitHub, moved to Codeberg. crates.io v0.15.1 (2025-09)
+    # predates the whisper.cpp i8mm fix (2025-10). Revisit when a new version is published.
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 

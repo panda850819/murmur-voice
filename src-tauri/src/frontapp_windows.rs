@@ -1,3 +1,4 @@
+use windows::core::PWSTR;
 use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
@@ -24,7 +25,7 @@ pub(crate) fn foreground_app_bundle_id() -> Option<String> {
 
         let mut buf = [0u16; 1024];
         let mut len = buf.len() as u32;
-        let ok = QueryFullProcessImageNameW(process, PROCESS_NAME_FORMAT(0), &mut buf, &mut len);
+        let ok = QueryFullProcessImageNameW(process, PROCESS_NAME_FORMAT(0), PWSTR(buf.as_mut_ptr()), &mut len);
         let _ = CloseHandle(process);
 
         if ok.is_err() {

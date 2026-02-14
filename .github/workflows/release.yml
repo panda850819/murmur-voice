@@ -10,7 +10,9 @@ permissions:
 
 jobs:
   build-macos:
-    runs-on: macos-latest
+    # macos-14 (M1) to avoid whisper-rs-sys i8mm build failure on newer runners.
+    # See ci.yml for details.
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
