@@ -18,6 +18,8 @@ pub(crate) struct MurmurState {
     engine: Mutex<Option<whisper::TranscriptionEngine>>,
     settings: Mutex<settings::Settings>,
     live_stop: AtomicBool,
+    /// Join handle for the live transcription thread so stop_recording can wait for it.
+    live_thread: Mutex<Option<std::thread::JoinHandle<()>>>,
     /// Generation counter for preview auto-hide timer cancellation.
     /// Incremented on each new recording; stale timers compare and bail out.
     preview_generation: AtomicU64,
@@ -127,7 +129,7 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
     state.live_stop.store(false, Ordering::SeqCst);
     if use_local_engine {
         let app_clone = app.clone();
-        std::thread::spawn(move || {
+        let handle = std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(1500));
 
             loop {
@@ -183,6 +185,9 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
                 std::thread::sleep(std::time::Duration::from_secs(2));
             }
         });
+        if let Ok(mut lt) = state.live_thread.lock() {
+            *lt = Some(handle);
+        }
     }
 
     Ok(())
@@ -192,6 +197,13 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
     let state = app.state::<MurmurState>();
 
     state.live_stop.store(true, Ordering::SeqCst);
+
+    // Wait for the live transcription thread to finish so we don't block on engine lock
+    if let Ok(mut lt) = state.live_thread.lock() {
+        if let Some(handle) = lt.take() {
+            let _ = handle.join();
+        }
+    }
 
     state
         .app_state
@@ -492,6 +504,7 @@ pub fn run() {
             engine: Mutex::new(None),
             settings: Mutex::new(initial_settings),
             live_stop: AtomicBool::new(false),
+            live_thread: Mutex::new(None),
             preview_generation: AtomicU64::new(0),
         })
         .invoke_handler(tauri::generate_handler![

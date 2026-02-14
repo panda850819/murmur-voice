@@ -27,12 +27,29 @@ impl serde::Serialize for ModelError {
 }
 
 pub(crate) fn model_dir() -> PathBuf {
-    let home = dirs_next()
-        .expect("could not determine home directory");
-    home.join("Library")
-        .join("Application Support")
-        .join("com.murmur.voice")
-        .join("models")
+    #[cfg(target_os = "macos")]
+    {
+        let home = dirs_next().expect("could not determine home directory");
+        home.join("Library")
+            .join("Application Support")
+            .join("com.murmur.voice")
+            .join("models")
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let appdata = std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .expect("APPDATA environment variable not set");
+        appdata.join("murmur-voice").join("models")
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let home = dirs_next().expect("could not determine home directory");
+        home.join(".local")
+            .join("share")
+            .join("murmur-voice")
+            .join("models")
+    }
 }
 
 pub(crate) fn model_path() -> PathBuf {

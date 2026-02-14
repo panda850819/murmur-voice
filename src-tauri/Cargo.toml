@@ -33,7 +33,7 @@ thiserror = "2"
 whisper-rs = { version = "0.15", features = ["metal"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-whisper-rs = { version = "0.15" }
+whisper-rs = { version = "0.15", features = ["cuda"] }
 windows = { version = "0.58", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_Threading",
