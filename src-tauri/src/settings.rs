@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn default_hold() -> String {
     "hold".to_string()
@@ -127,40 +127,20 @@ impl Settings {
     }
 }
 
-fn settings_path() -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        let home = std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("/tmp"));
-        home.join("Library")
-            .join("Application Support")
-            .join("com.murmur.voice")
-            .join("settings.json")
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let appdata = std::env::var_os("APPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("C:\\Users\\Default\\AppData\\Roaming"));
-        appdata.join("com.murmur.voice").join("settings.json")
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        PathBuf::from("/tmp/com.murmur.voice/settings.json")
-    }
+fn settings_path(base: &Path) -> PathBuf {
+    base.join("settings.json")
 }
 
-pub(crate) fn load_settings() -> Settings {
-    let path = settings_path();
+pub(crate) fn load_settings(base: &Path) -> Settings {
+    let path = settings_path(base);
     match std::fs::read_to_string(&path) {
         Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
         Err(_) => Settings::default(),
     }
 }
 
-pub(crate) fn save_settings(settings: &Settings) -> Result<(), String> {
-    let path = settings_path();
+pub(crate) fn save_settings(settings: &Settings, base: &Path) -> Result<(), String> {
+    let path = settings_path(base);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }

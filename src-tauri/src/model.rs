@@ -1,4 +1,6 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+#[cfg(target_os = "windows")]
+use std::sync::Once;
 use thiserror::Error;
 
 const MODEL_URL: &str =
@@ -26,46 +28,24 @@ impl serde::Serialize for ModelError {
     }
 }
 
-pub(crate) fn model_dir() -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        let home = std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("/tmp"));
-        home.join("Library")
-            .join("Application Support")
-            .join("com.murmur.voice")
-            .join("models")
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let appdata = std::env::var_os("APPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("C:\\Users\\Default\\AppData\\Roaming"));
-        appdata.join("murmur-voice").join("models")
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        let home = std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("/tmp"));
-        home.join(".local")
-            .join("share")
-            .join("murmur-voice")
-            .join("models")
-    }
+pub(crate) fn model_dir(base: &Path) -> PathBuf {
+    base.join("models")
 }
 
-pub(crate) fn model_path() -> PathBuf {
-    model_dir().join("ggml-large-v3-turbo.bin")
+pub(crate) fn model_path(base: &Path) -> PathBuf {
+    model_dir(base).join("ggml-large-v3-turbo.bin")
 }
 
-pub(crate) fn is_model_ready() -> bool {
-    // On Windows, migrate model from old macOS-style path if it exists at the new location
+pub(crate) fn is_model_ready(base: &Path) -> bool {
+    // On Windows, migrate model from old macOS-style path (runs at most once per process)
     #[cfg(target_os = "windows")]
-    migrate_model_from_old_path();
+    {
+        static MIGRATE: Once = Once::new();
+        let base_owned = base.to_path_buf();
+        MIGRATE.call_once(move || migrate_model_from_old_path(&base_owned));
+    }
 
-    let path = model_path();
+    let path = model_path(base);
     match std::fs::metadata(&path) {
         Ok(meta) => meta.len() == EXPECTED_SIZE,
         Err(_) => false,
@@ -75,8 +55,8 @@ pub(crate) fn is_model_ready() -> bool {
 /// On Windows, earlier versions stored the model under $HOME/Library/Application Support/...
 /// (a macOS path). Migrate it to the correct $APPDATA/... location if found.
 #[cfg(target_os = "windows")]
-fn migrate_model_from_old_path() {
-    let new_path = model_path();
+fn migrate_model_from_old_path(base: &Path) {
+    let new_path = model_path(base);
     if new_path.exists() {
         return; // already at correct location
     }
@@ -115,14 +95,14 @@ fn migrate_model_from_old_path() {
     }
 }
 
-pub(crate) async fn download_model<F>(progress_callback: F) -> Result<(), ModelError>
+pub(crate) async fn download_model<F>(base: &Path, progress_callback: F) -> Result<(), ModelError>
 where
     F: Fn(u64, u64),
 {
-    let dir = model_dir();
+    let dir = model_dir(base);
     std::fs::create_dir_all(&dir).map_err(|e| ModelError::CreateDir(e.to_string()))?;
 
-    let path = model_path();
+    let path = model_path(base);
 
     let client = reqwest::Client::new();
     let response = client

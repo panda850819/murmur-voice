@@ -8,14 +8,19 @@ mod settings;
 mod state;
 mod whisper;
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
 pub(crate) struct MurmurState {
+    app_data_dir: PathBuf,
     app_state: state::AppState,
     recorder: Mutex<Option<audio::AudioRecorder>>,
     engine: Mutex<Option<whisper::TranscriptionEngine>>,
+    /// Signals when background engine initialization is complete (success or not-needed).
+    /// `(Mutex<bool>, Condvar)` — `true` means init is done (or no init was needed).
+    engine_init_done: (Mutex<bool>, std::sync::Condvar),
     settings: Mutex<settings::Settings>,
     live_stop: AtomicBool,
     /// Join handle for the live transcription thread so stop_recording can wait for it.
@@ -23,6 +28,18 @@ pub(crate) struct MurmurState {
     /// Generation counter for preview auto-hide timer cancellation.
     /// Incremented on each new recording; stale timers compare and bail out.
     preview_generation: AtomicU64,
+}
+
+/// Signal that engine initialization is complete (success or failure).
+fn signal_engine_init_done(app: &tauri::AppHandle) {
+    let ms = app.state::<MurmurState>();
+    // Lock, set flag, drop guard, then notify — avoids borrow lifetime issues
+    let locked = ms.engine_init_done.0.lock();
+    if let Ok(mut done) = locked {
+        *done = true;
+        drop(done);
+        ms.engine_init_done.1.notify_all();
+    }
 }
 
 fn show_main_window(app: &tauri::AppHandle) {
@@ -171,7 +188,12 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
                     };
                     match engine_lock.as_ref() {
                         Some(engine) => engine.transcribe(&samples, &language, &initial_prompt).unwrap_or_default(),
-                        None => break,
+                        None => {
+                            // Engine not ready yet — wait and retry on next loop iteration
+                            drop(engine_lock);
+                            std::thread::sleep(std::time::Duration::from_secs(1));
+                            continue;
+                        }
                     }
                 };
 
@@ -277,14 +299,47 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         ))
         .map_err(|e| e.to_string())?
     } else {
-        // Local Whisper
+        // Local Whisper — wait for background engine init if still running
+        {
+            let (init_lock, cvar) = &state.engine_init_done;
+            let guard = init_lock
+                .lock()
+                .map_err(|e| format!("engine init mutex poisoned: {e}"))?;
+            if !*guard {
+                let (guard, _timeout) = cvar
+                    .wait_timeout(guard, std::time::Duration::from_secs(30))
+                    .map_err(|e| format!("engine init wait failed: {e}"))?;
+                if !*guard {
+                    log::warn!("engine init wait timed out after 30s");
+                }
+            }
+        }
+
         let engine_lock = state
             .engine
             .lock()
             .map_err(|e| format!("engine mutex poisoned: {e}"))?;
         match engine_lock.as_ref() {
             Some(engine) => engine.transcribe(&samples, &language, &initial_prompt).map_err(|e| e.to_string())?,
-            None => return Err("whisper engine not loaded".to_string()),
+            None => {
+                // Engine not available — retry init synchronously (task 4.4)
+                drop(engine_lock);
+                let model_path = model::model_path(&state.app_data_dir);
+                let model_path_str = model_path
+                    .to_str()
+                    .ok_or("model path contains invalid UTF-8")?;
+                log::info!("retrying engine init synchronously");
+                let engine = whisper::TranscriptionEngine::new(model_path_str)
+                    .map_err(|e| format!("engine init retry failed: {e}"))?;
+                let text = engine
+                    .transcribe(&samples, &language, &initial_prompt)
+                    .map_err(|e| e.to_string())?;
+                // Store engine for future use
+                if let Ok(mut lock) = state.engine.lock() {
+                    *lock = Some(engine);
+                }
+                text
+            }
         }
     };
 
@@ -363,14 +418,17 @@ fn get_recording_state(state: tauri::State<'_, MurmurState>) -> String {
 }
 
 #[tauri::command]
-fn is_model_ready() -> bool {
-    model::is_model_ready()
+fn is_model_ready(state: tauri::State<'_, MurmurState>) -> bool {
+    model::is_model_ready(&state.app_data_dir)
 }
 
 #[tauri::command]
 async fn download_model_cmd(app: tauri::AppHandle) -> Result<(), String> {
+    let murmur_state = app.state::<MurmurState>();
+    let base = murmur_state.app_data_dir.clone();
+
     let app_clone = app.clone();
-    model::download_model(move |downloaded, total| {
+    model::download_model(&base, move |downloaded, total| {
         let _ = app_clone.emit(
             "model_download_progress",
             serde_json::json!({
@@ -384,18 +442,39 @@ async fn download_model_cmd(app: tauri::AppHandle) -> Result<(), String> {
 
     let _ = app.emit("model_ready", ());
 
-    let murmur_state = app.state::<MurmurState>();
-    let model_path_str = model::model_path()
-        .to_str()
-        .ok_or("invalid model path")?
-        .to_string();
-    let engine =
-        whisper::TranscriptionEngine::new(&model_path_str).map_err(|e| e.to_string())?;
-    let mut engine_lock = murmur_state
-        .engine
-        .lock()
-        .map_err(|e| format!("engine mutex poisoned: {e}"))?;
-    *engine_lock = Some(engine);
+    // Spawn background engine init (don't block the command)
+    {
+        let init_done = &murmur_state.engine_init_done;
+        if let Ok(mut done) = init_done.0.lock() {
+            *done = false; // Mark as pending — background thread will set true
+        }
+    }
+    let app_handle = app.clone();
+    let model_path = model::model_path(&base);
+    std::thread::spawn(move || {
+        let model_path_str = match model_path.to_str() {
+            Some(s) => s.to_string(),
+            None => {
+                log::error!("model path contains invalid UTF-8");
+                signal_engine_init_done(&app_handle);
+                return;
+            }
+        };
+        match whisper::TranscriptionEngine::new(&model_path_str) {
+            Ok(engine) => {
+                let ms = app_handle.state::<MurmurState>();
+                if let Ok(mut lock) = ms.engine.lock() {
+                    *lock = Some(engine);
+                }
+                signal_engine_init_done(&app_handle);
+                log::info!("whisper engine loaded after download");
+            }
+            Err(e) => {
+                log::error!("engine init after download failed: {}", e);
+                signal_engine_init_done(&app_handle);
+            }
+        }
+    });
 
     Ok(())
 }
@@ -435,7 +514,7 @@ fn save_settings(
     }
 
     // Persist
-    settings::save_settings(&new_settings)?;
+    settings::save_settings(&new_settings, &state.app_data_dir)?;
 
     // Update in-memory state
     if let Ok(mut s) = state.settings.lock() {
@@ -452,7 +531,7 @@ fn complete_onboarding(
 ) -> Result<(), String> {
     if let Ok(mut s) = state.settings.lock() {
         s.onboarding_complete = true;
-        settings::save_settings(&s)?;
+        settings::save_settings(&s, &state.app_data_dir)?;
     }
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
@@ -489,25 +568,8 @@ fn open_settings(app: tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let initial_settings = settings::load_settings();
-    log::info!(
-        "loaded settings: onboarding_complete={}, recording_mode={}",
-        initial_settings.onboarding_complete,
-        initial_settings.recording_mode
-    );
-    hotkey::set_hotkey_mask(initial_settings.ptt_key_mask());
-
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(MurmurState {
-            app_state: state::AppState::new(),
-            recorder: Mutex::new(None),
-            engine: Mutex::new(None),
-            settings: Mutex::new(initial_settings),
-            live_stop: AtomicBool::new(false),
-            live_thread: Mutex::new(None),
-            preview_generation: AtomicU64::new(0),
-        })
         .invoke_handler(tauri::generate_handler![
             get_recording_state,
             is_model_ready,
@@ -521,6 +583,35 @@ pub fn run() {
             complete_onboarding,
         ])
         .setup(|app| {
+            // Resolve app data directory from Tauri
+            let app_data_dir = app.path().app_data_dir()
+                .map_err(|e| format!("failed to resolve app data dir: {e}"))?;
+
+            // Load settings from the resolved path
+            let initial_settings = settings::load_settings(&app_data_dir);
+            log::info!(
+                "loaded settings: onboarding_complete={}, recording_mode={}",
+                initial_settings.onboarding_complete,
+                initial_settings.recording_mode
+            );
+            hotkey::set_hotkey_mask(initial_settings.ptt_key_mask());
+
+            // Register MurmurState with the resolved app_data_dir.
+            // engine_init_done starts as `true` if model is not ready (nothing to wait for),
+            // `false` if model exists (background thread will set it on completion).
+            let model_ready = model::is_model_ready(&app_data_dir);
+            app.manage(MurmurState {
+                app_data_dir: app_data_dir.clone(),
+                app_state: state::AppState::new(),
+                recorder: Mutex::new(None),
+                engine: Mutex::new(None),
+                engine_init_done: (Mutex::new(!model_ready), std::sync::Condvar::new()),
+                settings: Mutex::new(initial_settings),
+                live_stop: AtomicBool::new(false),
+                live_thread: Mutex::new(None),
+                preview_generation: AtomicU64::new(0),
+            });
+
             // Create system tray with Settings + Quit
             let settings_item =
                 tauri::menu::MenuItem::with_id(app, "settings", "Settings...", true, None::<&str>)?;
@@ -598,32 +689,34 @@ pub fn run() {
                 }
             }
 
-            // Load whisper engine if model exists
-            if model::is_model_ready() {
-                let load_result = model::model_path()
-                    .to_str()
-                    .map(whisper::TranscriptionEngine::new);
-
-                match load_result {
-                    Some(Ok(engine)) => {
-                        let murmur_state = app.state::<MurmurState>();
-                        match murmur_state.engine.lock() {
-                            Ok(mut lock) => {
+            // Load whisper engine in background thread (non-blocking startup)
+            if model_ready {
+                let app_handle = app.handle().clone();
+                let model_path = model::model_path(&app_data_dir);
+                std::thread::spawn(move || {
+                    let model_path_str = match model_path.to_str() {
+                        Some(s) => s.to_string(),
+                        None => {
+                            log::error!("model path contains invalid UTF-8");
+                            signal_engine_init_done(&app_handle);
+                            return;
+                        }
+                    };
+                    match whisper::TranscriptionEngine::new(&model_path_str) {
+                        Ok(engine) => {
+                            let ms = app_handle.state::<MurmurState>();
+                            if let Ok(mut lock) = ms.engine.lock() {
                                 *lock = Some(engine);
-                                log::info!("whisper engine loaded successfully");
                             }
-                            Err(e) => {
-                                log::error!("engine mutex poisoned during setup: {}", e);
-                            }
-                        };
+                            signal_engine_init_done(&app_handle);
+                            log::info!("whisper engine loaded in background");
+                        }
+                        Err(e) => {
+                            log::error!("background engine init failed: {}", e);
+                            signal_engine_init_done(&app_handle);
+                        }
                     }
-                    Some(Err(e)) => {
-                        log::error!("failed to load whisper engine: {}", e);
-                    }
-                    None => {
-                        log::error!("model path contains invalid UTF-8");
-                    }
-                }
+                });
             }
 
             // Start hotkey listener

@@ -3,6 +3,12 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 
 const MIN_SAMPLES: usize = 16_000; // 1s at 16kHz — shorter clips produce hallucinations
 
+fn optimal_threads() -> i32 {
+    std::thread::available_parallelism()
+        .map(|n| n.get() as i32)
+        .unwrap_or(4)
+}
+
 #[derive(Debug, Error)]
 pub(crate) enum WhisperError {
     #[error("failed to load whisper model: {0}")]
@@ -51,7 +57,7 @@ impl TranscriptionEngine {
         // 1 second of silence at 16kHz
         let dummy = vec![0.0f32; 16_000];
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        params.set_n_threads(4);
+        params.set_n_threads(optimal_threads());
         params.set_language(Some("en"));
         params.set_print_progress(false);
         params.set_print_realtime(false);
@@ -78,7 +84,7 @@ impl TranscriptionEngine {
         }
 
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        params.set_n_threads(4);
+        params.set_n_threads(optimal_threads());
         params.set_language(Some(language));
         params.set_print_progress(false);
         params.set_print_realtime(false);
