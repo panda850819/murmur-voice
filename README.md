@@ -1,5 +1,12 @@
 # Murmur
 
+[![Release](https://img.shields.io/github/v/release/panda850819/murmur-voice?include_prereleases&style=flat-square)](https://github.com/panda850819/murmur-voice/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/panda850819/murmur-voice/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/panda850819/murmur-voice/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/panda850819/murmur-voice?style=flat-square)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue?style=flat-square)]()
+
+**[English](README.md)** | **[繁體中文](README.zh-TW.md)**
+
 > Your voice, unheard by others.
 
 Privacy-first voice-to-text for macOS and Windows, built with Rust.
@@ -25,10 +32,20 @@ Murmur is a voice dictation tool that transcribes your speech and inserts polish
 - **Lightweight** -- Tauri-based, ~30-50MB vs 200MB+ Electron apps
 - **Open Source** -- Fully auditable, no telemetry, no tracking
 
+## Download
+
+Download the latest release from the [Releases page](https://github.com/panda850819/murmur-voice/releases).
+
+| Platform | File | Notes |
+|----------|------|-------|
+| macOS (Apple Silicon) | `.dmg` | Requires [quarantine removal](#macos-murmur-voice-is-damaged-and-cant-be-opened) |
+| Windows | `.exe` / `.msi` | CPU-only, works on all hardware |
+| Windows (NVIDIA GPU) | `-cuda.exe` / `-cuda.msi` | GPU-accelerated via CUDA |
+
 ## How It Works
 
 ```
-Hotkey → Record (cpal) → Transcribe (Whisper) → LLM Clean-up (optional) → Paste at cursor
+Hotkey -> Record (cpal) -> Transcribe (Whisper) -> LLM Clean-up (optional) -> Paste at cursor
 ```
 
 **Each recording triggers at most 2 API calls** (when using Groq): one for Whisper transcription, one for LLM post-processing.
@@ -65,7 +82,7 @@ To switch engines: **Settings > Transcription > Engine**
 Requires a **Groq API key** (same key used for both Whisper and LLM).
 
 What it does:
-- Removes filler words (um, uh, 嗯, 啊, 那個, 就是...)
+- Removes filler words (um, uh, etc.)
 - Removes false starts and self-corrections
 - Adds proper punctuation (full-width for Chinese, half-width for English)
 - Converts Simplified Chinese to Traditional Chinese (Taiwan standard)
@@ -110,7 +127,7 @@ For the best experience with Chinese dictation:
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
 | App Framework | Tauri 2 | Lightweight desktop app |
-| Audio Capture | cpal | Microphone input → 16kHz mono |
+| Audio Capture | cpal | Microphone input -> 16kHz mono |
 | Speech-to-Text | whisper-rs / Groq API | Local or cloud transcription |
 | LLM Processing | Groq API (Llama 3.3) | Text cleanup and formatting |
 | Hotkey Detection | CGEventTap / SetWindowsHookEx | Global modifier key listener (per-platform) |
@@ -130,6 +147,31 @@ For the best experience with Chinese dictation:
 
 ### Both Platforms
 - Groq API key (free, for cloud engine and LLM features)
+
+## FAQ
+
+### macOS: "Murmur Voice is damaged and can't be opened"
+
+This happens because the app is not signed with an Apple Developer certificate. macOS Gatekeeper quarantines unsigned apps by default. To fix:
+
+1. Move Murmur Voice to `/Applications`
+2. Open Terminal and run:
+   ```bash
+   xattr -d com.apple.quarantine /Applications/Murmur\ Voice.app
+   ```
+3. Open the app normally
+
+### Windows: Which version should I download?
+
+| Your GPU | Download | Why |
+|----------|----------|-----|
+| NVIDIA (with CUDA drivers) | `-cuda` version | GPU-accelerated transcription, much faster |
+| AMD / Intel / integrated | Standard version | CPU transcription, works on all hardware |
+| Not sure | Standard version | Always works, just slower for local engine |
+
+### Why is the app unsigned?
+
+Murmur is a free, open-source project. Apple Developer Program costs $99/year. Code signing may be added in the future, but for now the workaround above is required on macOS.
 
 ## Privacy
 

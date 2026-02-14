@@ -11,6 +11,9 @@ pnpm tauri dev
 # Production build
 pnpm tauri build
 
+# Production build with CUDA (Windows only, requires CUDA toolkit)
+pnpm tauri build --features cuda
+
 # Rust-only commands (run from src-tauri/)
 cd src-tauri
 cargo check                                       # fast iteration
@@ -115,6 +118,7 @@ Two recording modes: **Hold** (press=start, release=stop) and **Toggle** (press 
 - **LLM post-processing prompt** must explicitly state input is raw transcription, not a question — otherwise the model answers instead of cleaning up. User message is prefixed with `[Raw transcription to clean up]`
 - **Windows model migration** runs at most once per process via `std::sync::Once` in `is_model_ready()`
 - **CI uses `macos-14`** (not `macos-latest`) due to whisper-rs-sys i8mm build failure on newer ARM runners. whisper-rs is maintained on Codeberg (archived on GitHub); crates.io v0.15.1 predates the whisper.cpp fix
+- **Release workflow** produces 3 builds: macOS (.dmg), Windows CPU (.msi/.exe), Windows CUDA (-cuda.msi/-cuda.exe). CUDA job uses manual `pnpm tauri build` + `softprops/action-gh-release` (not `tauri-action`) to avoid filename collision with CPU build
 
 ## Platform Requirements
 
