@@ -86,3 +86,62 @@ jobs:
           releaseBody: "See the assets below to download and install."
           releaseDraft: true
           prerelease: false
+
+  build-windows-cuda:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CUDA toolkit
+        uses: Jimver/cuda-toolkit@v0.2.19
+        with:
+          cuda: "12.6.3"
+          method: network
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: windows-cuda
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install frontend deps
+        run: pnpm install
+
+      - name: Build Tauri app (CUDA)
+        run: pnpm tauri build --features cuda
+
+      - name: Rename CUDA artifacts
+        shell: pwsh
+        run: |
+          $bundleDir = "src-tauri/target/release/bundle"
+          Get-ChildItem "$bundleDir/msi/*.msi" | ForEach-Object {
+            $newName = $_.Name -replace '\.msi$', '-cuda.msi'
+            Rename-Item $_.FullName $newName
+          }
+          Get-ChildItem "$bundleDir/nsis/*.exe" | ForEach-Object {
+            $newName = $_.Name -replace '\.exe$', '-cuda.exe'
+            Rename-Item $_.FullName $newName
+          }
+
+      - name: Upload CUDA artifacts to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          files: |
+            src-tauri/target/release/bundle/msi/*-cuda.msi
+            src-tauri/target/release/bundle/nsis/*-cuda.exe

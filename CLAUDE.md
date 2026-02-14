@@ -64,7 +64,7 @@ Each platform file exports the same public API. `clipboard.rs` uses inline `#[cf
 
 Platform-conditional deps in `Cargo.toml`:
 - macOS: `whisper-rs` with `metal` feature
-- Windows: `whisper-rs` with `cuda` feature, `windows` crate for Win32 APIs
+- Windows: `whisper-rs` CPU-only by default; `cuda` crate feature enables GPU acceleration (requires CUDA toolkit at build time). `windows` crate for Win32 APIs
 
 ## Recording Flow
 

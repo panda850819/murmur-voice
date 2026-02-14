@@ -9,6 +9,10 @@ edition = "2021"
 name = "murmur_voice_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = []
+cuda = ["whisper-rs/cuda"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -33,7 +37,7 @@ thiserror = "2"
 whisper-rs = { version = "0.15", features = ["metal"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-whisper-rs = { version = "0.15", features = ["cuda"] }
+whisper-rs = { version = "0.15" }
 windows = { version = "0.58", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_Threading",
