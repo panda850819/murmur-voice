@@ -97,11 +97,12 @@ Two recording modes: **Hold** (press=start, release=stop) and **Toggle** (press 
 
 ## Key Patterns
 
-- **Shared state**: `MurmurState` with `Mutex<T>` fields, injected via `.manage()`
-- **Threading**: hotkey listener (CFRunLoop on macOS / SetWindowsHookEx on Windows), audio capture (cpal callback), live transcription (std::thread), model download (tokio async)
+- **Shared state**: `MurmurState` with `Mutex<T>` fields, injected via `.manage()`. Includes `engine_init_done: (Mutex<bool>, Condvar)` for background engine readiness signaling.
+- **Background engine init**: TranscriptionEngine loads in a background `std::thread` during startup. Recording waits on Condvar if engine isn't ready yet. On failure, retries on first recording attempt.
+- **Threading**: hotkey listener (CFRunLoop on macOS / SetWindowsHookEx on Windows), audio capture (cpal callback), live transcription (std::thread), model download (tokio async), engine init (std::thread)
+- **Dynamic thread count**: `whisper.rs::optimal_threads()` uses `std::thread::available_parallelism()` with fallback to 4. Used in both warmup and transcription.
 - **Hotkey mask**: `AtomicU64` updated at runtime when settings change, no restart needed
-- **Settings path**: platform app data dir + `settings.json` (resolved via `settings_path()`)
-- **Model path**: platform app data dir + `models/ggml-large-v3-turbo.bin`
+- **Path resolution**: All paths resolved via Tauri's `app.path().app_data_dir()`, stored in `MurmurState.app_data_dir`. No `#[cfg]` path assembly — `model.rs` and `settings.rs` accept `base: &Path`.
 - **PTT keys**: Both legacy format (`left_option`) and JS `event.code` format (`AltLeft`) accepted in `ptt_key_mask()`
 
 ## Gotchas
@@ -112,6 +113,8 @@ Two recording modes: **Hold** (press=start, release=stop) and **Toggle** (press 
 - **`frontapp_windows.rs` uses `windows` crate** — `PWSTR` wrapper required for Win32 string buffer APIs
 - **Live transcription** only runs for local engine; Groq mode skips it entirely (cost)
 - **Toggle mode** checks `app_state.current()` (not a local flag) to decide start/stop — this avoids desync after auto-stop timeout
+- **LLM post-processing prompt** must explicitly state input is raw transcription, not a question — otherwise the model answers instead of cleaning up. User message is prefixed with `[Raw transcription to clean up]`
+- **Windows model migration** runs at most once per process via `std::sync::Once` in `is_model_ready()`
 - **CI uses `macos-14`** (not `macos-latest`) due to whisper-rs-sys i8mm build failure on newer ARM runners. whisper-rs is maintained on Codeberg (archived on GitHub); crates.io v0.15.1 predates the whisper.cpp fix
 
 ## Platform Requirements
