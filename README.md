@@ -4,9 +4,9 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/panda850819/murmur-voice/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/panda850819/murmur-voice/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/panda850819/murmur-voice?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue?style=flat-square)]()
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?style=flat-square&logo=buy-me-a-coffee)](https://buymeacoffee.com/pdzeng)
-
 **[English](README.md)** | **[繁體中文](README.zh-TW.md)**
+
+<a href="https://buymeacoffee.com/pdzeng"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="48" width="173" alt="Buy Me A Coffee" /></a>
 
 > Your voice, unheard by others.
 
