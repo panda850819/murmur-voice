@@ -11,6 +11,11 @@
 
 Privacy-first voice-to-text for macOS and Windows, built with Rust.
 
+<p align="center">
+  <img src="assets/screenshot-settings.png" width="360" alt="Settings" />
+  <img src="assets/screenshot-recording.png" width="360" alt="Recording" />
+</p>
+
 ## What is Murmur?
 
 Murmur is a voice dictation tool that transcribes your speech and inserts polished text at your cursor position -- in any app. It supports both local (on-device) and cloud transcription, with optional LLM post-processing to clean up filler words, fix punctuation, and convert Simplified Chinese to Traditional Chinese.

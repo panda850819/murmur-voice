@@ -11,6 +11,11 @@
 
 隱私優先的語音轉文字工具，支援 macOS 與 Windows，以 Rust 打造。
 
+<p align="center">
+  <img src="assets/screenshot-settings.png" width="360" alt="設定畫面" />
+  <img src="assets/screenshot-recording.png" width="360" alt="錄音畫面" />
+</p>
+
 ## Murmur 是什麼？
 
 Murmur 是一款語音聽寫工具，能將你的語音轉錄並將整理好的文字插入游標所在位置 -- 適用於任何應用程式。支援本機（裝置端）與雲端轉錄，可選擇性啟用 LLM 後處理來移除贅詞、修正標點、將簡體中文轉換為繁體中文。
