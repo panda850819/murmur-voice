@@ -4,6 +4,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/panda850819/murmur-voice/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/panda850819/murmur-voice/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/panda850819/murmur-voice?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue?style=flat-square)]()
+
 **[English](README.md)** | **[繁體中文](README.zh-TW.md)**
 
 <a href="https://buymeacoffee.com/pdzeng"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="48" width="173" alt="Buy Me A Coffee" /></a>
@@ -188,6 +189,19 @@ Murmur was born from a security audit of a commercial voice-to-text app that was
 - Include session recording analytics (Microsoft Clarity)
 
 Murmur does none of this. When using the **local engine**, your audio never leaves your machine. When using **Groq**, audio is sent only to Groq's API for transcription -- no other data is collected or transmitted.
+
+## Donate
+
+If you find Murmur useful, consider supporting the project:
+
+<a href="https://buymeacoffee.com/pdzeng"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="48" width="173" alt="Buy Me A Coffee" /></a>
+
+**Crypto:**
+
+| Network | Address |
+|---------|---------|
+| EVM (Ethereum, Base, etc.) | `0x9ae8954201b2fce97b124887e415df02e8e06a8d` |
+| Solana | `Eod4VqvMmmMnY3EinN6Zo5xzt9Wq5S2dFZutob1VBvMf` |
 
 ## License
 

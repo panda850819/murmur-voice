@@ -4,6 +4,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/panda850819/murmur-voice/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/panda850819/murmur-voice/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/panda850819/murmur-voice?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue?style=flat-square)]()
+
 **[English](README.md)** | **[繁體中文](README.zh-TW.md)**
 
 <a href="https://buymeacoffee.com/pdzeng"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="48" width="173" alt="Buy Me A Coffee" /></a>
@@ -188,6 +189,19 @@ Murmur 誕生於一次對商業語音轉文字應用的安全審計，該應用�
 - 包含工作階段錄影分析（Microsoft Clarity）
 
 Murmur 不做任何上述行為。使用**本機引擎**時，你的音訊不會離開你的電腦。使用 **Groq** 時，音訊僅傳送至 Groq 的 API 進行轉錄 -- 不會收集或傳送任何其他資料。
+
+## 贊助
+
+如果你覺得 Murmur 好用，歡迎支持這個專案：
+
+<a href="https://buymeacoffee.com/pdzeng"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="48" width="173" alt="Buy Me A Coffee" /></a>
+
+**Crypto:**
+
+| 網路 | 地址 |
+|------|------|
+| EVM (Ethereum, Base 等) | `0x9ae8954201b2fce97b124887e415df02e8e06a8d` |
+| Solana | `Eod4VqvMmmMnY3EinN6Zo5xzt9Wq5S2dFZutob1VBvMf` |
 
 ## 授權
 
