@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Global hotkey detection
-The system SHALL detect the configured modifier key press and release events globally using CGEventTap, regardless of which application has focus. In hold mode, press starts and release stops recording. In toggle mode, press toggles recording state and release is ignored.
+The system SHALL detect the configured modifier key press and release events globally using platform-specific APIs (CGEventTap on macOS, `SetWindowsHookExW` on Windows), regardless of which application has focus. In hold mode, press starts and release stops recording. In toggle mode, press toggles recording state and release is ignored.
 
 #### Scenario: Hold mode - key pressed
 - **WHEN** recording_mode is "hold" and the user presses the hotkey

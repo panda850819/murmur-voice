@@ -33,7 +33,7 @@ The system SHALL display a 320x120 transparent, always-on-top window without tit
 - **THEN** the window is 320x120, always on top, no decorations, transparent background, not shown in taskbar
 
 ### Requirement: Frontend state events
-The system SHALL emit events to the frontend: recording_state_changed, transcription_complete, model_download_progress, model_ready.
+The system SHALL emit events to the frontend: recording_state_changed, transcription_complete, model_download_progress, model_ready, foreground_app_info.
 
 #### Scenario: State change notification
 - **WHEN** the recording state changes
@@ -42,6 +42,10 @@ The system SHALL emit events to the frontend: recording_state_changed, transcrip
 #### Scenario: Transcription result notification
 - **WHEN** transcription completes with non-empty text
 - **THEN** the system emits transcription_complete with the transcribed text
+
+#### Scenario: Foreground app notification
+- **WHEN** transcription begins
+- **THEN** the system emits foreground_app_info with the detected app name and style
 
 ### Requirement: Hotkey-to-action orchestration
 The system SHALL connect hotkey events to recording and transcription actions: pressed starts recording, released stops recording and triggers transcription followed by text insertion.

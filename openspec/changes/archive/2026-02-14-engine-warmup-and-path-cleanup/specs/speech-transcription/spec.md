@@ -1,16 +1,3 @@
-## ADDED Requirements
-
-### Requirement: Extended language support
-The system SHALL support all major Whisper languages in the language selector, including but not limited to: Japanese, Korean, French, German, Spanish, Portuguese, Russian, Arabic, Hindi, Thai, Vietnamese, Indonesian.
-
-#### Scenario: Select Japanese
-- **WHEN** the user selects Japanese in settings
-- **THEN** Whisper uses "ja" as the language parameter
-
-#### Scenario: Language list in UI
-- **WHEN** the user opens the language dropdown in settings
-- **THEN** at least 15 languages are available for selection
-
 ## MODIFIED Requirements
 
 ### Requirement: Local Whisper transcription

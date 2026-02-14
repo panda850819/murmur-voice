@@ -1,9 +1,4 @@
-# model-management Specification
-
-## Purpose
-Manages Whisper model storage, download, availability checks, and cross-platform migration.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Model storage location
 The system SHALL store Whisper models in the platform app data directory resolved via Tauri's `app.path().app_data_dir()`, under a `models/` subdirectory. The system SHALL NOT use hardcoded platform paths or manual `#[cfg]` path assembly.
