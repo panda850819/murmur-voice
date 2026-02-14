@@ -11,6 +11,7 @@ mod whisper;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::time::Instant;
 use tauri::{Emitter, Manager};
 
 pub(crate) struct MurmurState {
@@ -355,6 +356,8 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         ))
         .unwrap_or_else(|_| (false, String::new(), String::new(), false));
 
+    eprintln!("[whisper raw] {}", raw_text);
+
     let text = if llm_enabled && !api_key.is_empty() && !raw_text.is_empty() {
         let _ = state
             .app_state
@@ -372,7 +375,10 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
 
         let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
         match rt.block_on(llm::process_text(&api_key, &llm_model, &raw_text, style)) {
-            Ok(processed) => processed,
+            Ok(processed) => {
+                eprintln!("[llm output] {}", processed);
+                processed
+            }
             Err(e) => {
                 log::error!("LLM post-processing failed: {}", e);
                 let _ = app.emit("recording_error", format!("LLM processing failed, using raw text: {e}"));
@@ -383,29 +389,53 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         raw_text
     };
 
-    if !text.is_empty() {
-        if let Err(e) = clipboard::insert_text(&text) {
-            let _ = app.emit("recording_error", format!("clipboard error: {e}"));
-            log::error!("failed to insert text: {}", e);
+    // Detect if foreground app can accept paste (default: true, only false for Desktop/Finder)
+    let has_input = if !text.is_empty() {
+        std::panic::catch_unwind(frontapp::has_focused_text_input).unwrap_or(true)
+    } else {
+        false
+    };
+    let output_mode = if !text.is_empty() {
+        if has_input {
+            // Auto-paste mode: save clipboard → paste → restore
+            if let Err(e) = clipboard::insert_text(&text) {
+                let _ = app.emit("recording_error", format!("clipboard error: {e}"));
+                log::error!("failed to insert text: {}", e);
+            }
+            "pasted"
+        } else {
+            // Clipboard-only mode: just copy, no paste simulation
+            if let Err(e) = clipboard::copy_only(&text) {
+                let _ = app.emit("recording_error", format!("clipboard error: {e}"));
+                log::error!("failed to copy text: {}", e);
+            }
+            "clipboard"
         }
-    }
+    } else {
+        "pasted" // empty text, doesn't matter
+    };
 
     let _ = state.app_state.transition(state::RecordingState::Idle);
     let _ = app.emit("recording_state_changed", "idle");
-    let _ = app.emit("transcription_complete", &text);
+    let _ = app.emit(
+        "transcription_complete",
+        serde_json::json!({ "text": text, "mode": output_mode }),
+    );
 
-    // Auto-hide main + preview windows after 3 seconds (minimum 1s display).
+    // Auto-hide: 10s for pasted mode, no timer for clipboard mode.
     // The generation counter cancels this timer if a new recording starts.
-    let generation = state.preview_generation.load(Ordering::SeqCst);
-    let app_clone = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(3));
-        let ms = app_clone.state::<MurmurState>();
-        if ms.preview_generation.load(Ordering::SeqCst) == generation {
-            hide_preview_window(&app_clone);
-            hide_main_window(&app_clone);
-        }
-    });
+    if output_mode == "pasted" {
+        let generation = state.preview_generation.load(Ordering::SeqCst);
+        let app_clone = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(10));
+            let ms = app_clone.state::<MurmurState>();
+            if ms.preview_generation.load(Ordering::SeqCst) == generation {
+                hide_preview_window(&app_clone);
+                hide_main_window(&app_clone);
+            }
+        });
+    }
 
     Ok(text)
 }
@@ -548,6 +578,42 @@ fn hide_preview(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
+fn copy_to_clipboard(text: String) -> Result<(), String> {
+    clipboard::copy_only(&text).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn add_dictionary_term(
+    term: String,
+    state: tauri::State<'_, MurmurState>,
+) -> Result<(), String> {
+    let trimmed = term.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+
+    if let Ok(mut s) = state.settings.lock() {
+        // Check for duplicate
+        let existing: Vec<&str> = s.dictionary.split(',').map(|t| t.trim()).collect();
+        if existing.iter().any(|&t| t.eq_ignore_ascii_case(trimmed)) {
+            return Ok(()); // Already exists
+        }
+
+        // Append
+        if s.dictionary.is_empty() {
+            s.dictionary = trimmed.to_string();
+        } else {
+            s.dictionary = format!("{}, {}", s.dictionary, trimmed);
+        }
+
+        // Persist
+        settings::save_settings(&s, &state.app_data_dir)?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 fn open_settings(app: tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("settings") {
         let _ = w.set_focus();
@@ -581,6 +647,8 @@ pub fn run() {
             open_settings,
             hide_preview,
             complete_onboarding,
+            copy_to_clipboard,
+            add_dictionary_term,
         ])
         .setup(|app| {
             // Resolve app data directory from Tauri
@@ -726,6 +794,7 @@ pub fn run() {
 
             std::thread::spawn(move || {
                 let mut is_recording = false;
+                let mut last_toggle: Option<Instant> = None;
                 while let Ok(event) = receiver.recv() {
                     let mode = {
                         let ms = app_handle.state::<MurmurState>();
@@ -739,6 +808,16 @@ pub fn run() {
                         hotkey::HotkeyEvent::Pressed => {
                             match mode.as_str() {
                                 "toggle" => {
+                                    // Debounce: skip if last toggle was < 500ms ago
+                                    if let Some(last) = last_toggle {
+                                        if last.elapsed()
+                                            < std::time::Duration::from_millis(500)
+                                        {
+                                            continue;
+                                        }
+                                    }
+                                    last_toggle = Some(Instant::now());
+
                                     let murmur_state = app_handle.state::<MurmurState>();
                                     let current = murmur_state.app_state.current();
                                     if current == state::RecordingState::Recording {

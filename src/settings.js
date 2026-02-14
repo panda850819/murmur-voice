@@ -30,6 +30,9 @@ let currentPttKey = "AltLeft";
 let isRecording = false;
 let recordingMode = "hold";
 let dictTags = [];
+let dictTagsSnapshot = [];
+let undoTimer = null;
+let undoEntry = null; // { term, index }
 
 const el = (id) => document.getElementById(id);
 
@@ -130,8 +133,36 @@ function addDictTag(term) {
 }
 
 function removeDictTag(index) {
-  dictTags.splice(index, 1);
+  const removed = dictTags.splice(index, 1)[0];
   renderDictTags();
+  showDictUndo(removed, index);
+}
+
+function showDictUndo(term, index) {
+  if (undoTimer) {
+    clearTimeout(undoTimer);
+  }
+  undoEntry = { term, index };
+  const container = el("dict-undo");
+  el("dict-undo-text").textContent = `Removed "${term}"`;
+  container.style.display = "flex";
+  undoTimer = setTimeout(() => {
+    container.style.display = "none";
+    undoEntry = null;
+    undoTimer = null;
+  }, 4000);
+}
+
+function doDictUndo() {
+  if (!undoEntry) return;
+  const { term, index } = undoEntry;
+  const pos = Math.min(index, dictTags.length);
+  dictTags.splice(pos, 0, term);
+  renderDictTags();
+  if (undoTimer) clearTimeout(undoTimer);
+  el("dict-undo").style.display = "none";
+  undoEntry = null;
+  undoTimer = null;
 }
 
 function getDictString() {
@@ -162,6 +193,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     el("auto-start").checked = s.auto_start;
     setRecordingMode(s.recording_mode || "hold");
     loadDictFromString(s.dictionary || "");
+    dictTagsSnapshot = [...dictTags];
     el("llm-enabled").checked = s.llm_enabled || false;
     el("llm-model").value = s.llm_model || "llama-3.3-70b-versatile";
     el("app-aware-style").checked = s.app_aware_style !== false;
@@ -217,6 +249,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+  // Undo button
+  el("dict-undo-btn").addEventListener("click", doDictUndo);
+
   // Opacity slider
   el("opacity").addEventListener("input", () => {
     el("opacity-value").textContent = Math.round(el("opacity").value * 100) + "%";
@@ -249,5 +284,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   // Cancel
-  el("btn-cancel").addEventListener("click", () => getCurrentWindow().close());
+  el("btn-cancel").addEventListener("click", () => {
+    dictTags = [...dictTagsSnapshot];
+    renderDictTags();
+    getCurrentWindow().close();
+  });
 });

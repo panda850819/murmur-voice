@@ -50,6 +50,19 @@ pub(crate) fn insert_text(text: &str) -> Result<(), ClipboardError> {
     Ok(())
 }
 
+/// Copies text to the system clipboard without simulating paste or restoring previous content.
+pub(crate) fn copy_only(text: &str) -> Result<(), ClipboardError> {
+    if text.is_empty() {
+        return Ok(());
+    }
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|e| ClipboardError::Access(e.to_string()))?;
+    clipboard
+        .set_text(text)
+        .map_err(|e| ClipboardError::Access(e.to_string()))?;
+    Ok(())
+}
+
 #[cfg(target_os = "macos")]
 fn simulate_paste() -> Result<(), ClipboardError> {
     use rdev::{simulate, EventType, Key};

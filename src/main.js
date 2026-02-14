@@ -66,8 +66,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   await listen("transcription_complete", (event) => {
-    const text = event.payload;
-    transcription().textContent = text;
+    const { text } = event.payload;
+    transcription().textContent = text || "";
     setStatus("done", "Done");
 
     setTimeout(() => {

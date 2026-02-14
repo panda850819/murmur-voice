@@ -1,7 +1,12 @@
 use windows::core::PWSTR;
 use windows::Win32::Foundation::CloseHandle;
+use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED};
 use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
+};
+use windows::Win32::UI::Accessibility::{
+    CUIAutomation, IUIAutomation, UIA_ComboBoxControlTypeId, UIA_DocumentControlTypeId,
+    UIA_EditControlTypeId,
 };
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
 
@@ -85,5 +90,44 @@ pub(crate) fn style_for_app(exe_name: &str) -> &'static str {
         | "powershell.exe" | "pwsh.exe" => "technical",
 
         _ => "default",
+    }
+}
+
+/// Returns true if the foreground app can likely accept pasted text.
+///
+/// Default is true (auto-paste). Returns false only when we can confirm the
+/// foreground app is a context where paste makes no sense (e.g. Explorer on
+/// Desktop with no text input focused).
+pub(crate) fn has_focused_text_input() -> bool {
+    let exe = foreground_app_bundle_id();
+    match exe.as_deref() {
+        // Explorer: only paste if there's a text input focused (e.g. rename dialog, address bar)
+        Some("explorer.exe") => explorer_has_input_focus(),
+        // No foreground app detected
+        None => false,
+        // All other apps: assume they can accept paste (terminals, editors, browsers, etc.)
+        Some(_) => true,
+    }
+}
+
+/// For Explorer specifically, check if there's a text input focused.
+/// Returns false when user is on the Desktop or browsing files without a text field.
+fn explorer_has_input_focus() -> bool {
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+
+        let result = (|| -> windows::core::Result<bool> {
+            let automation: IUIAutomation =
+                CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)?;
+            let focused = automation.GetFocusedElement()?;
+            let control_type = focused.CurrentControlType()?;
+            Ok(control_type == UIA_EditControlTypeId
+                || control_type == UIA_DocumentControlTypeId
+                || control_type == UIA_ComboBoxControlTypeId)
+        })();
+
+        CoUninitialize();
+
+        result.unwrap_or(false)
     }
 }

@@ -118,4 +118,99 @@ html, body {
   display: inline-block;
 }
 
+/* -- Footer Actions -- */
+
+.footer-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.copy-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.copy-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.copy-btn:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.copy-btn.copied {
+  background: rgba(74, 222, 128, 0.2);
+  color: rgba(74, 222, 128, 0.9);
+  border-color: rgba(74, 222, 128, 0.2);
+}
+
+/* -- Editable State -- */
+
+.preview-text[contenteditable="true"] {
+  background: rgba(255, 255, 255, 0.04);
+  outline: none;
+  cursor: text;
+  border-radius: 4px;
+  padding: 4px;
+}
+
+/* -- Dictionary Suggestion Bar -- */
+
+.dict-suggest {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+#dict-suggest-text {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+}
+
+.dict-suggest-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.dict-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.dict-btn:hover {
+  opacity: 0.85;
+}
+
+.dict-btn:active {
+  opacity: 0.7;
+}
+
+.dict-add {
+  background: rgba(96, 165, 250, 0.25);
+  color: rgba(147, 197, 253, 0.95);
+}
+
+.dict-dismiss {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.5);
+}
+
 /* Processing state handled by JS (appends animated dots to header text) */

@@ -99,6 +99,99 @@ pub(crate) fn style_for_app(bundle_id: &str) -> &'static str {
     }
 }
 
+/// Returns true if the foreground app can likely accept pasted text.
+///
+/// Default is true (auto-paste). Returns false only when we can confirm the
+/// foreground app is a context where paste makes no sense (e.g. Desktop/Finder
+/// with no window, or AX query fails suggesting no active UI).
+pub(crate) fn has_focused_text_input() -> bool {
+    // Check the foreground app — skip paste only for known non-input contexts
+    let bundle = foreground_app_bundle_id();
+    match bundle.as_deref() {
+        // Finder: only skip paste if there's no focused element (user is on Desktop)
+        Some("com.apple.finder") => unsafe { finder_has_input_focus() },
+        // No foreground app detected
+        None => false,
+        // All other apps: assume they can accept paste (terminals, editors, browsers, etc.)
+        Some(_) => true,
+    }
+}
+
+/// For Finder specifically, check if there's a text input focused (e.g. rename dialog).
+/// Returns false when user is on the Desktop or browsing files without a text field.
+unsafe fn finder_has_input_focus() -> bool {
+    let system = AXUIElementCreateSystemWide();
+    if system.is_null() {
+        return false;
+    }
+
+    let attr_focused = cf_str(c"AXFocusedUIElement");
+    if attr_focused.is_null() {
+        CFRelease(system);
+        return false;
+    }
+
+    let mut focused_element: CFTypeRef = std::ptr::null();
+    let err = AXUIElementCopyAttributeValue(system, attr_focused, &mut focused_element);
+    CFRelease(attr_focused);
+    CFRelease(system);
+
+    if err != K_AX_ERROR_SUCCESS || focused_element.is_null() {
+        return false;
+    }
+
+    // Check if the focused element is a text field
+    let attr_role = cf_str(c"AXRole");
+    if attr_role.is_null() {
+        CFRelease(focused_element);
+        return false;
+    }
+    let mut role_value: CFTypeRef = std::ptr::null();
+    let err = AXUIElementCopyAttributeValue(focused_element, attr_role, &mut role_value);
+    CFRelease(attr_role);
+    CFRelease(focused_element);
+
+    if err != K_AX_ERROR_SUCCESS || role_value.is_null() {
+        return false;
+    }
+
+    let role = cfstring_to_string(role_value);
+    CFRelease(role_value);
+
+    matches!(
+        role.as_deref(),
+        Some("AXTextField" | "AXTextArea" | "AXSearchField" | "AXComboBox")
+    )
+}
+
+// --- Accessibility API helpers ---
+
+type CFTypeRef = *const std::ffi::c_void;
+type AXUIElementRef = CFTypeRef;
+type CFStringRef = CFTypeRef;
+type AXError = i32;
+const K_AX_ERROR_SUCCESS: AXError = 0;
+
+unsafe fn cf_str(s: &CStr) -> CFStringRef {
+    extern "C" {
+        fn CFStringCreateWithCString(
+            alloc: CFTypeRef,
+            c_str: *const std::ffi::c_char,
+            encoding: u32,
+        ) -> CFStringRef;
+    }
+    CFStringCreateWithCString(std::ptr::null(), s.as_ptr(), 0x0600_0100) // kCFStringEncodingUTF8
+}
+
+unsafe fn cfstring_to_string(cfstr: CFStringRef) -> Option<String> {
+    let mut buf = [0i8; 256];
+    if CFStringGetCString(cfstr, buf.as_mut_ptr(), buf.len() as i64, 0x0600_0100) {
+        CStr::from_ptr(buf.as_ptr()).to_str().ok().map(String::from)
+    } else {
+        None
+    }
+}
+
 // --- Raw Objective-C FFI bindings ---
 
 #[repr(C)]
@@ -110,6 +203,24 @@ extern "C" {
     fn objc_getClass(name: *const std::ffi::c_char) -> *const Object;
     fn sel_registerName(name: *const std::ffi::c_char) -> Sel;
     fn objc_msgSend(obj: *mut Object, sel: Sel) -> *mut Object;
+}
+
+// --- Accessibility API FFI bindings ---
+
+extern "C" {
+    fn AXUIElementCreateSystemWide() -> AXUIElementRef;
+    fn AXUIElementCopyAttributeValue(
+        element: AXUIElementRef,
+        attribute: CFStringRef,
+        value: *mut CFTypeRef,
+    ) -> AXError;
+    fn CFRelease(cf: CFTypeRef);
+    fn CFStringGetCString(
+        the_string: CFStringRef,
+        buffer: *mut std::ffi::c_char,
+        buffer_size: i64,
+        encoding: u32,
+    ) -> bool;
 }
 
 #[repr(C)]
