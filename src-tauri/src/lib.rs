@@ -119,15 +119,16 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
         });
     }
 
-    // Start live transcription thread (local engine only — Groq would be too expensive)
-    let use_local_engine = state
+    // Start live transcription thread (local engine only — Groq would be too expensive).
+    // Requires GPU acceleration (Metal on macOS, CUDA on Windows) to be fast enough.
+    let enable_live_preview = state
         .settings
         .lock()
         .map(|s| s.engine != "groq")
         .unwrap_or(true);
 
     state.live_stop.store(false, Ordering::SeqCst);
-    if use_local_engine {
+    if enable_live_preview {
         let app_clone = app.clone();
         let handle = std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(1500));
@@ -656,6 +657,10 @@ pub fn run() {
                                                 .transition(state::RecordingState::Idle);
                                             let _ = app_handle
                                                 .emit("recording_state_changed", "idle");
+                                            let _ = app_handle
+                                                .emit("recording_error", e.to_string());
+                                            hide_preview_window(&app_handle);
+                                            hide_main_window(&app_handle);
                                         }
                                     } else if current == state::RecordingState::Idle {
                                         match do_start_recording(&app_handle) {
@@ -705,6 +710,9 @@ pub fn run() {
                                     .app_state
                                     .transition(state::RecordingState::Idle);
                                 let _ = app_handle.emit("recording_state_changed", "idle");
+                                let _ = app_handle.emit("recording_error", e.to_string());
+                                hide_preview_window(&app_handle);
+                                hide_main_window(&app_handle);
                             }
                         }
                     }

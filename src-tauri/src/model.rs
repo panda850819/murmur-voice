@@ -29,7 +29,9 @@ impl serde::Serialize for ModelError {
 pub(crate) fn model_dir() -> PathBuf {
     #[cfg(target_os = "macos")]
     {
-        let home = dirs_next().expect("could not determine home directory");
+        let home = std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/tmp"));
         home.join("Library")
             .join("Application Support")
             .join("com.murmur.voice")
@@ -39,12 +41,14 @@ pub(crate) fn model_dir() -> PathBuf {
     {
         let appdata = std::env::var_os("APPDATA")
             .map(PathBuf::from)
-            .expect("APPDATA environment variable not set");
+            .unwrap_or_else(|| PathBuf::from("C:\\Users\\Default\\AppData\\Roaming"));
         appdata.join("murmur-voice").join("models")
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        let home = dirs_next().expect("could not determine home directory");
+        let home = std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/tmp"));
         home.join(".local")
             .join("share")
             .join("murmur-voice")
@@ -57,10 +61,57 @@ pub(crate) fn model_path() -> PathBuf {
 }
 
 pub(crate) fn is_model_ready() -> bool {
+    // On Windows, migrate model from old macOS-style path if it exists at the new location
+    #[cfg(target_os = "windows")]
+    migrate_model_from_old_path();
+
     let path = model_path();
     match std::fs::metadata(&path) {
         Ok(meta) => meta.len() == EXPECTED_SIZE,
         Err(_) => false,
+    }
+}
+
+/// On Windows, earlier versions stored the model under $HOME/Library/Application Support/...
+/// (a macOS path). Migrate it to the correct $APPDATA/... location if found.
+#[cfg(target_os = "windows")]
+fn migrate_model_from_old_path() {
+    let new_path = model_path();
+    if new_path.exists() {
+        return; // already at correct location
+    }
+
+    let old_path = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .map(|h| {
+            h.join("Library")
+                .join("Application Support")
+                .join("com.murmur.voice")
+                .join("models")
+                .join("ggml-large-v3-turbo.bin")
+        });
+
+    if let Some(old) = old_path {
+        if old.exists() {
+            if let Some(parent) = new_path.parent() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    log::error!("failed to create model directory {:?}: {}", parent, e);
+                    return;
+                }
+            }
+            if let Err(e) = std::fs::rename(&old, &new_path) {
+                // Cross-drive move: rename fails, fall back to copy + delete
+                log::warn!("rename failed (likely cross-drive): {}, trying copy", e);
+                if std::fs::copy(&old, &new_path).is_ok() {
+                    let _ = std::fs::remove_file(&old);
+                    log::info!("copied model from {:?} to {:?}", old, new_path);
+                } else {
+                    log::error!("failed to copy model from {:?} to {:?}", old, new_path);
+                }
+            } else {
+                log::info!("migrated model from {:?} to {:?}", old, new_path);
+            }
+        }
     }
 }
 
@@ -109,6 +160,3 @@ where
     Ok(())
 }
 
-fn dirs_next() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
-}

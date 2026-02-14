@@ -33,10 +33,32 @@ unsafe impl Sync for TranscriptionEngine {}
 impl TranscriptionEngine {
     pub(crate) fn new(model_path: &str) -> Result<Self, WhisperError> {
         let mut params = WhisperContextParameters::new();
-        params.use_gpu(true); // Metal on macOS
+        params.use_gpu(true); // Metal (macOS) or CUDA (Windows)
         let ctx = WhisperContext::new_with_params(model_path, params)
             .map_err(|e| WhisperError::ModelLoad(e.to_string()))?;
-        Ok(Self { ctx })
+        let engine = Self { ctx };
+        engine.warmup();
+        Ok(engine)
+    }
+
+    /// Run a short dummy inference to warm up CUDA/Metal kernels.
+    /// Without this, the first real transcription is very slow due to JIT compilation.
+    fn warmup(&self) {
+        let Ok(mut state) = self.ctx.create_state() else {
+            log::warn!("warmup: failed to create state, first transcription may be slow");
+            return;
+        };
+        // 1 second of silence at 16kHz
+        let dummy = vec![0.0f32; 16_000];
+        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+        params.set_n_threads(4);
+        params.set_language(Some("en"));
+        params.set_print_progress(false);
+        params.set_print_realtime(false);
+        params.set_print_special(false);
+        params.set_print_timestamps(false);
+        params.set_suppress_blank(true);
+        let _ = state.full(params, &dummy);
     }
 
     pub(crate) fn transcribe(&self, samples: &[f32], language: &str, initial_prompt: &str) -> Result<String, WhisperError> {
