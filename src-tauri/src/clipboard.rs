@@ -50,6 +50,7 @@ pub(crate) fn insert_text(text: &str) -> Result<(), ClipboardError> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
 fn simulate_paste() -> Result<(), ClipboardError> {
     use rdev::{simulate, EventType, Key};
 
@@ -58,6 +59,25 @@ fn simulate_paste() -> Result<(), ClipboardError> {
         EventType::KeyPress(Key::KeyV),
         EventType::KeyRelease(Key::KeyV),
         EventType::KeyRelease(Key::MetaLeft),
+    ];
+
+    for event in &events {
+        simulate(event).map_err(|e| ClipboardError::Simulate(format!("{:?}", e)))?;
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn simulate_paste() -> Result<(), ClipboardError> {
+    use rdev::{simulate, EventType, Key};
+
+    let events = [
+        EventType::KeyPress(Key::ControlLeft),
+        EventType::KeyPress(Key::KeyV),
+        EventType::KeyRelease(Key::KeyV),
+        EventType::KeyRelease(Key::ControlLeft),
     ];
 
     for event in &events {

@@ -2,7 +2,7 @@
 
 > Your voice, unheard by others.
 
-Privacy-first voice-to-text for macOS, built with Rust.
+Privacy-first voice-to-text for macOS and Windows, built with Rust.
 
 ## What is Murmur?
 
@@ -20,6 +20,7 @@ Murmur is a voice dictation tool that transcribes your speech and inserts polish
 - **Transcription Preview** -- Floating preview window shows full transcription result with live updates, character count, and detected app name
 - **Live Preview** -- See partial transcription while you speak (local engine only)
 - **15 Languages** -- Auto-detect or manually select from 15 supported languages
+- **Cross-Platform** -- macOS and Windows support with platform-native hotkey and app detection
 - **System-wide** -- Works in any text field across all apps
 - **Lightweight** -- Tauri-based, ~30-50MB vs 200MB+ Electron apps
 - **Open Source** -- Fully auditable, no telemetry, no tracking
@@ -112,15 +113,22 @@ For the best experience with Chinese dictation:
 | Audio Capture | cpal | Microphone input → 16kHz mono |
 | Speech-to-Text | whisper-rs / Groq API | Local or cloud transcription |
 | LLM Processing | Groq API (Llama 3.3) | Text cleanup and formatting |
-| Hotkey Detection | CGEventTap (CoreGraphics) | Global modifier key listener |
-| Text Insertion | arboard + rdev | Clipboard write + Cmd+V simulation |
-| App Detection | NSWorkspace (FFI) | Foreground app bundle ID + display name |
+| Hotkey Detection | CGEventTap / SetWindowsHookEx | Global modifier key listener (per-platform) |
+| Text Insertion | arboard + rdev | Clipboard write + Cmd+V / Ctrl+V simulation |
+| App Detection | NSWorkspace / Win32 API | Foreground app detection (per-platform) |
 
 ## Requirements
 
+### macOS
 - macOS 12.0+ (Apple Silicon recommended for local Whisper)
 - Microphone permission
 - Accessibility permission (for global hotkey + text insertion)
+
+### Windows
+- Windows 10+
+- Microphone permission
+
+### Both Platforms
 - Groq API key (free, for cloud engine and LLM features)
 
 ## Privacy

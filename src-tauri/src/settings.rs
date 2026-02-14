@@ -57,7 +57,8 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// Returns the CGEventFlags mask for the configured PTT key.
+    /// Returns the platform-specific key mask for the configured PTT key.
+    #[cfg(target_os = "macos")]
     pub fn ptt_key_mask(&self) -> u64 {
         match self.ptt_key.as_str() {
             "left_option" | "AltLeft" => 0x20,       // NX_DEVICELALTKEYMASK
@@ -69,6 +70,22 @@ impl Settings {
             "left_control" | "ControlLeft" => 0x01,  // NX_DEVICELCTLKEYMASK
             "right_control" | "ControlRight" => 0x2000, // NX_DEVICERCTLKEYMASK
             _ => 0x20,
+        }
+    }
+
+    /// Returns the platform-specific key mask for the configured PTT key.
+    #[cfg(target_os = "windows")]
+    pub fn ptt_key_mask(&self) -> u64 {
+        match self.ptt_key.as_str() {
+            "left_option" | "AltLeft" => 0xA4,        // VK_LMENU
+            "right_option" | "AltRight" => 0xA5,       // VK_RMENU
+            "left_command" | "MetaLeft" => 0x5B,       // VK_LWIN
+            "right_command" | "MetaRight" => 0x5C,     // VK_RWIN
+            "left_shift" | "ShiftLeft" => 0xA0,        // VK_LSHIFT
+            "right_shift" | "ShiftRight" => 0xA1,      // VK_RSHIFT
+            "left_control" | "ControlLeft" => 0xA2,    // VK_LCONTROL
+            "right_control" | "ControlRight" => 0xA3,  // VK_RCONTROL
+            _ => 0xA4, // default: left alt
         }
     }
 
@@ -111,13 +128,27 @@ impl Settings {
 }
 
 fn settings_path() -> PathBuf {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/tmp"));
-    home.join("Library")
-        .join("Application Support")
-        .join("com.murmur.voice")
-        .join("settings.json")
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/tmp"));
+        home.join("Library")
+            .join("Application Support")
+            .join("com.murmur.voice")
+            .join("settings.json")
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let appdata = std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("C:\\Users\\Default\\AppData\\Roaming"));
+        appdata.join("com.murmur.voice").join("settings.json")
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        PathBuf::from("/tmp/com.murmur.voice/settings.json")
+    }
 }
 
 pub(crate) fn load_settings() -> Settings {
