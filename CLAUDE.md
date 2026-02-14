@@ -27,15 +27,14 @@ Tauri 2 desktop app: Rust backend (core process) + vanilla HTML/JS/CSS frontend 
 Frontend (src/)                    Backend (src-tauri/src/)
 ├── index.html      main window    ├── lib.rs        app setup, commands, tray
 ├── settings.html   preferences    ├── audio.rs      cpal mic capture → 16kHz mono
-├── preview.html    transcription  ├── whisper.rs    whisper.cpp via whisper-rs
+├── preview.html    transcription  ├── whisper.rs    whisper-rs (Metal/CUDA)
 ├── onboarding.html first-run      ├── hotkey.rs     cfg dispatcher → _macos.rs / _windows.rs
 ├── *.js            invoke/listen  ├── frontapp.rs   cfg dispatcher → _macos.rs / _windows.rs
 └── *.css                          ├── clipboard.rs  arboard + rdev (cfg gates for paste key)
                                    ├── model.rs      HuggingFace model download
                                    ├── settings.rs   JSON persistence + key mapping
                                    ├── state.rs      recording state machine
-                                   ├── llm.rs        Groq LLM API post-processing
-                                   └── preview.rs    transcription preview window
+                                   └── llm.rs        Groq LLM API post-processing
 ```
 
 **IPC**: Frontend calls backend via `invoke("command")` (uses `window.__TAURI__.core.invoke` via `withGlobalTauri`), backend pushes to frontend via `app.emit("event", payload)`.
@@ -65,7 +64,7 @@ Each platform file exports the same public API. `clipboard.rs` uses inline `#[cf
 
 Platform-conditional deps in `Cargo.toml`:
 - macOS: `whisper-rs` with `metal` feature
-- Windows: `whisper-rs` (no metal), `windows` crate for Win32 APIs
+- Windows: `whisper-rs` with `cuda` feature, `windows` crate for Win32 APIs
 
 ## Recording Flow
 
