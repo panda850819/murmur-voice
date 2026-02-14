@@ -25,14 +25,16 @@ Murmur is a voice dictation tool that transcribes your speech and inserts polish
 ## Features
 
 - **Push-to-Talk** -- Hold a modifier key to speak, release to insert text
-- **Toggle Mode** -- Press once to start recording, press again to stop (with 5-min auto-stop)
+- **Toggle Mode** -- Press once to start recording, press again to stop (with 5-min auto-stop and debounce protection)
 - **Custom Hotkey** -- Choose any modifier key (Option, Command, Shift, Control, left or right)
 - **Dual Engine** -- Local Whisper (Metal GPU) or Groq cloud API
 - **LLM Post-Processing** -- Clean up filler words, add punctuation, Simplified-to-Traditional Chinese conversion via Groq LLM
+- **Smart Clipboard** -- Auto-pastes when a text field is focused; copies to clipboard only when no text input is detected (e.g. on Desktop)
 - **App-Aware Style** -- Automatically adjusts output tone based on the active app (e.g. formal in Slack, technical in VS Code)
-- **Personal Dictionary** -- Add custom terms to improve transcription accuracy
-- **Transcription Preview** -- Floating preview window shows full transcription result with live updates, character count, and detected app name
+- **Personal Dictionary** -- Add custom terms to improve transcription accuracy, with undo support for deletions
+- **Transcription Preview** -- Floating preview window with copy button, editable text, character count, and detected app name
 - **Live Preview** -- See partial transcription while you speak (local engine only)
+- **Mixed-Language Support** -- English words in mixed CJK-English speech are preserved as-is (never translated)
 - **15 Languages** -- Auto-detect or manually select from 15 supported languages
 - **Cross-Platform** -- macOS and Windows support with platform-native hotkey and app detection
 - **System-wide** -- Works in any text field across all apps
@@ -52,7 +54,7 @@ Download the latest release from the [Releases page](https://github.com/panda850
 ## How It Works
 
 ```
-Hotkey -> Record (cpal) -> Transcribe (Whisper) -> LLM Clean-up (optional) -> Paste at cursor
+Hotkey -> Record (cpal) -> Transcribe (Whisper) -> LLM Clean-up (optional) -> Smart Clipboard (paste or copy-only)
 ```
 
 **Each recording triggers at most 2 API calls** (when using Groq): one for Whisper transcription, one for LLM post-processing.
