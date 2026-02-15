@@ -283,6 +283,31 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+  // Check for Updates
+  el("btn-check-update").addEventListener("click", async () => {
+    const btn = el("btn-check-update");
+    btn.textContent = "Checking...";
+    btn.disabled = true;
+    try {
+      const result = await invoke("check_for_updates");
+      if (result.up_to_date) {
+        btn.textContent = "Up to date (v" + result.current_version + ")";
+        setTimeout(() => { btn.textContent = "Check for Updates"; btn.disabled = false; }, 3000);
+      } else {
+        btn.textContent = "v" + result.latest_version + " available";
+        btn.classList.add("update-available");
+        btn.disabled = false;
+        btn.onclick = async () => {
+          await invoke("open_url", { url: result.release_url });
+        };
+      }
+    } catch (e) {
+      btn.textContent = "Check failed";
+      btn.disabled = false;
+      setTimeout(() => { btn.textContent = "Check for Updates"; }, 3000);
+    }
+  });
+
   // Cancel
   el("btn-cancel").addEventListener("click", () => {
     dictTags = [...dictTagsSnapshot];

@@ -442,6 +442,50 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
 
 // --- Tauri Commands ---
 
+#[derive(serde::Serialize)]
+struct UpdateCheckResult {
+    up_to_date: bool,
+    current_version: String,
+    latest_version: String,
+    release_url: String,
+}
+
+#[tauri::command]
+async fn check_for_updates() -> Result<UpdateCheckResult, String> {
+    let current = env!("CARGO_PKG_VERSION");
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .get("https://api.github.com/repos/panda850819/murmur-voice/releases/latest")
+        .header("User-Agent", "murmur-voice")
+        .send()
+        .await
+        .map_err(|e| format!("request failed: {e}"))?;
+
+    let json: serde_json::Value = resp.json().await.map_err(|e| format!("parse failed: {e}"))?;
+    let tag = json["tag_name"].as_str().unwrap_or("unknown");
+    let latest = tag.trim_start_matches('v');
+    let url = json["html_url"]
+        .as_str()
+        .unwrap_or("https://github.com/panda850819/murmur-voice/releases")
+        .to_string();
+
+    Ok(UpdateCheckResult {
+        up_to_date: current == latest,
+        current_version: current.to_string(),
+        latest_version: latest.to_string(),
+        release_url: url,
+    })
+}
+
+#[tauri::command]
+async fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(&url, None::<&str>)
+        .map_err(|e| format!("failed to open URL: {e}"))
+}
+
 #[tauri::command]
 fn get_recording_state(state: tauri::State<'_, MurmurState>) -> String {
     state.app_state.current().to_string()
@@ -649,6 +693,8 @@ pub fn run() {
             complete_onboarding,
             copy_to_clipboard,
             add_dictionary_term,
+            check_for_updates,
+            open_url,
         ])
         .setup(|app| {
             // Resolve app data directory from Tauri
