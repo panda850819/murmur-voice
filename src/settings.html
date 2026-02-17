@@ -99,6 +99,7 @@
               <span class="toggle-track"></span>
             </label>
           </div>
+          <div class="row-desc" data-i18n="hint.llm">Auto-clean filler words, add punctuation, fix grammar after transcription</div>
           <div id="llm-settings" style="display: none;">
             <div class="row">
               <span class="row-label" data-i18n="row.provider">Provider</span>
@@ -117,11 +118,13 @@
                 <span class="row-label" data-i18n="row.model">Model</span>
                 <select id="llm-model">
                   <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
+                  <option value="gemma2-9b-it">Gemma 2 9B</option>
                   <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fast)</option>
                 </select>
               </div>
             </div>
             <div id="ollama-section" style="display: none;">
+              <div class="row-desc" data-i18n="hint.ollama">Runs locally, fully offline. Requires Ollama installed.</div>
               <div class="row">
                 <span class="row-label" data-i18n="row.url">URL</span>
                 <input type="text" id="ollama-url" placeholder="http://localhost:11434" spellcheck="false" />
@@ -153,6 +156,7 @@
               <span class="toggle-track"></span>
             </label>
           </div>
+          <div class="row-desc" data-i18n="hint.appAware">Auto-adjust tone based on active app (e.g. terminal → technical style)</div>
         </div>
       </section>
 

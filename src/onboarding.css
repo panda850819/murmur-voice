@@ -96,6 +96,38 @@ h1 {
   color: var(--text-muted);
 }
 
+/* ── Locale Picker (Step 1) ── */
+
+.locale-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.locale-btn {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.locale-btn:hover {
+  color: var(--text-primary);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.locale-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: var(--shadow-btn);
+}
+
 /* ── Highlights (Step 1) ── */
 
 .highlights {

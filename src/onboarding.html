@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="onboarding.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Welcome to Murmur Voice</title>
+    <script src="/i18n.js"></script>
     <script src="/onboarding.js" defer></script>
   </head>
   <body>
@@ -21,26 +22,30 @@
             <path d="M24 14v10m0 0v10m0-10h10m-10 0H14" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
           </svg>
         </div>
-        <h1>Welcome to Murmur Voice</h1>
-        <p class="description">
+        <h1 data-i18n="onboard.welcome">Welcome to Murmur Voice</h1>
+        <p class="description" data-i18n="onboard.welcomeDesc">
           Privacy-first voice-to-text for macOS. Your audio is processed locally
           using Whisper &mdash; nothing leaves your machine.
         </p>
+        <div class="locale-picker">
+          <button class="locale-btn active" data-locale="en">English</button>
+          <button class="locale-btn" data-locale="zh-TW">繁體中文</button>
+        </div>
         <div class="highlights">
           <div class="highlight-item">
             <span class="highlight-icon">&#9679;</span>
-            <span>100% local processing</span>
+            <span data-i18n="onboard.localProcessing">100% local processing</span>
           </div>
           <div class="highlight-item">
             <span class="highlight-icon">&#9679;</span>
-            <span>Push-to-talk with modifier keys</span>
+            <span data-i18n="onboard.pushToTalk">Push-to-talk with modifier keys</span>
           </div>
           <div class="highlight-item">
             <span class="highlight-icon">&#9679;</span>
-            <span>Auto-paste transcription to any app</span>
+            <span data-i18n="onboard.autoPaste">Auto-paste transcription to any app</span>
           </div>
         </div>
-        <button class="btn primary next-btn" data-next="2">Get Started</button>
+        <button class="btn primary next-btn" data-next="2" data-i18n="onboard.getStarted">Get Started</button>
       </div>
 
       <!-- Step 2: Permissions -->
@@ -53,24 +58,24 @@
             <line x1="24" y1="30" x2="24" y2="34" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/>
           </svg>
         </div>
-        <h1>Permissions</h1>
-        <p class="description">
+        <h1 data-i18n="onboard.permissions">Permissions</h1>
+        <p class="description" data-i18n="onboard.permissionsDesc">
           Murmur needs two system permissions to work properly.
         </p>
         <div class="permission-list">
           <div class="permission-item">
-            <span class="permission-label">Microphone</span>
-            <span class="permission-hint">System Settings &rsaquo; Privacy &amp; Security &rsaquo; Microphone</span>
+            <span class="permission-label" data-i18n="onboard.microphone">Microphone</span>
+            <span class="permission-hint" data-i18n="onboard.micHint">System Settings &rsaquo; Privacy &amp; Security &rsaquo; Microphone</span>
           </div>
           <div class="permission-item">
-            <span class="permission-label">Accessibility</span>
-            <span class="permission-hint">System Settings &rsaquo; Privacy &amp; Security &rsaquo; Accessibility</span>
+            <span class="permission-label" data-i18n="onboard.accessibility">Accessibility</span>
+            <span class="permission-hint" data-i18n="onboard.accHint">System Settings &rsaquo; Privacy &amp; Security &rsaquo; Accessibility</span>
           </div>
         </div>
-        <p class="description muted">
+        <p class="description muted" data-i18n="onboard.permissionsNote">
           macOS will prompt you automatically. If it doesn't, open System Settings manually.
         </p>
-        <button class="btn primary next-btn" data-next="3">Next</button>
+        <button class="btn primary next-btn" data-next="3" data-i18n="onboard.next">Next</button>
       </div>
 
       <!-- Step 3: Model Download -->
@@ -82,8 +87,8 @@
             <path d="M16 32h16" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/>
           </svg>
         </div>
-        <h1>Download Model</h1>
-        <p class="description">
+        <h1 data-i18n="onboard.downloadModel">Download Model</h1>
+        <p class="description" data-i18n="onboard.downloadDesc">
           Whisper large-v3-turbo model for accurate local transcription.
         </p>
         <div id="model-status" class="model-status">
@@ -93,9 +98,9 @@
             </div>
             <span id="model-progress-text" class="progress-text">0%</span>
           </div>
-          <button id="btn-download" class="btn primary">Download (~1.5 GB)</button>
+          <button id="btn-download" class="btn primary" data-i18n="onboard.downloadBtn">Download (~1.5 GB)</button>
         </div>
-        <button id="btn-step3-next" class="btn primary next-btn" data-next="4" style="display: none;">Next</button>
+        <button id="btn-step3-next" class="btn primary next-btn" data-next="4" style="display: none;" data-i18n="onboard.next">Next</button>
       </div>
 
       <!-- Step 4: Hotkey -->
@@ -107,12 +112,12 @@
             <rect x="20" y="24" width="8" height="3" rx="1" fill="var(--accent)" fill-opacity="0.3"/>
           </svg>
         </div>
-        <h1>Set Your Hotkey</h1>
-        <p class="description">
+        <h1 data-i18n="onboard.setHotkey">Set Your Hotkey</h1>
+        <p class="description" data-i18n="onboard.hotkeyDesc">
           Choose a modifier key for push-to-talk. Hold it to record, release to transcribe.
         </p>
         <button id="onboard-ptt-record" class="record-btn">Left Option</button>
-        <button id="btn-done" class="btn primary next-btn">Done</button>
+        <button id="btn-done" class="btn primary next-btn" data-i18n="onboard.done">Done</button>
       </div>
 
       <!-- Step indicators -->

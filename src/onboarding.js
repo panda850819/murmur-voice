@@ -15,6 +15,7 @@ const KEY_MAP = {
 let currentStep = 1;
 let pttKey = "AltLeft";
 let isRecording = false;
+let chosenLocale = "en";
 
 const el = (id) => document.getElementById(id);
 
@@ -44,6 +45,16 @@ function stopPttRecording() {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  // Locale picker buttons
+  document.querySelectorAll(".locale-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      chosenLocale = btn.dataset.locale;
+      document.querySelectorAll(".locale-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      applyLocale(chosenLocale);
+    });
+  });
+
   // Next buttons
   document.querySelectorAll(".next-btn[data-next]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -109,13 +120,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  // Done button
+  // Done button — save PTT key + locale
   el("btn-done").addEventListener("click", async () => {
     el("btn-done").disabled = true;
     try {
-      // Save PTT key setting first
       const settings = await invoke("get_settings");
       settings.ptt_key = pttKey;
+      settings.ui_locale = chosenLocale;
       settings.onboarding_complete = true;
       await invoke("save_settings", { newSettings: settings });
       await invoke("complete_onboarding");
