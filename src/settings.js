@@ -48,7 +48,7 @@ function setPttKey(code) {
 function startRecording() {
   isRecording = true;
   const btn = el("ptt-record");
-  btn.textContent = "Press a key...";
+  btn.textContent = t("ptt.pressKey");
   btn.classList.add("recording");
 }
 
@@ -131,7 +131,7 @@ function renderDictTags() {
   });
 
   const count = el("dict-count");
-  count.textContent = dictTags.length > 0 ? dictTags.length + " terms" : "";
+  count.textContent = dictTags.length > 0 ? t("dict.nTerms").replace("{n}", dictTags.length) : "";
 }
 
 function addDictTag(term) {
@@ -154,7 +154,7 @@ function showDictUndo(term, index) {
   }
   undoEntry = { term, index };
   const container = el("dict-undo");
-  el("dict-undo-text").textContent = `Removed "${term}"`;
+  el("dict-undo-text").textContent = t("dict.removedTerm").replace("{term}", term);
   container.style.display = "flex";
   undoTimer = setTimeout(() => {
     container.style.display = "none";
@@ -219,7 +219,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     el("ui-locale").value = s.ui_locale || "en";
     applyLocale(s.ui_locale || "en");
   } catch (e) {
-    showStatus("Failed to load settings", true);
+    showStatus(t("status.loadFailed"), true);
   }
 
   // Record button
@@ -310,25 +310,25 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     try {
       await invoke("save_settings", { newSettings });
-      showStatus("Saved");
+      showStatus(t("status.saved"));
       setTimeout(() => getCurrentWindow().close(), 500);
     } catch (e) {
-      showStatus("Failed: " + e, true);
+      showStatus(t("status.saveFailed").replace("{err}", e), true);
     }
   });
 
   // Check for Updates
   el("btn-check-update").addEventListener("click", async () => {
     const btn = el("btn-check-update");
-    btn.textContent = "Checking...";
+    btn.textContent = t("update.checking");
     btn.disabled = true;
     try {
       const result = await invoke("check_for_updates");
       if (result.up_to_date) {
-        btn.textContent = "Up to date (v" + result.current_version + ")";
-        setTimeout(() => { btn.textContent = "Check for Updates"; btn.disabled = false; }, 3000);
+        btn.textContent = t("update.upToDate").replace("{version}", result.current_version);
+        setTimeout(() => { btn.textContent = t("btn.checkUpdate"); btn.disabled = false; }, 3000);
       } else {
-        btn.textContent = "v" + result.latest_version + " available";
+        btn.textContent = t("update.available").replace("{version}", result.latest_version);
         btn.classList.add("update-available");
         btn.disabled = false;
         btn.onclick = async () => {
@@ -336,9 +336,9 @@ window.addEventListener("DOMContentLoaded", async () => {
         };
       }
     } catch (e) {
-      btn.textContent = "Check failed";
+      btn.textContent = t("update.failed");
       btn.disabled = false;
-      setTimeout(() => { btn.textContent = "Check for Updates"; }, 3000);
+      setTimeout(() => { btn.textContent = t("btn.checkUpdate"); }, 3000);
     }
   });
 

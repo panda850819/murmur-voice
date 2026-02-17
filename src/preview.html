@@ -5,6 +5,7 @@
     <link rel="stylesheet" href="preview.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Murmur Preview</title>
+    <script src="/i18n.js"></script>
     <script src="/preview.js" defer></script>
   </head>
   <body>
@@ -18,15 +19,15 @@
       <div id="preview-footer" class="preview-footer">
         <span id="char-count" class="char-count"></span>
         <div class="footer-actions">
-          <button id="copy-btn" class="copy-btn" style="display:none;">Copy</button>
+          <button id="copy-btn" class="copy-btn" data-i18n="preview.copy" style="display:none;">Copy</button>
         </div>
         <span id="app-badge" class="app-badge"></span>
       </div>
       <div id="dict-suggest" class="dict-suggest" style="display:none;">
         <span id="dict-suggest-text"></span>
         <div class="dict-suggest-actions">
-          <button id="dict-add-btn" class="dict-btn dict-add">Add</button>
-          <button id="dict-dismiss-btn" class="dict-btn dict-dismiss">Dismiss</button>
+          <button id="dict-add-btn" class="dict-btn dict-add" data-i18n="preview.add">Add</button>
+          <button id="dict-dismiss-btn" class="dict-btn dict-dismiss" data-i18n="preview.dismiss">Dismiss</button>
         </div>
       </div>
     </div>

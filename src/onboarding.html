@@ -19,7 +19,10 @@
         <div class="step-icon">
           <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
             <rect width="48" height="48" rx="12" fill="var(--accent)" fill-opacity="0.12"/>
-            <path d="M24 14v10m0 0v10m0-10h10m-10 0H14" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M24 14a4 4 0 014 4v6a4 4 0 01-8 0v-6a4 4 0 014-4z" stroke="var(--accent)" stroke-width="2"/>
+            <path d="M16 24a8 8 0 0016 0" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/>
+            <line x1="24" y1="32" x2="24" y2="36" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/>
+            <line x1="20" y1="36" x2="28" y2="36" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/>
           </svg>
         </div>
         <h1 data-i18n="onboard.welcome">Welcome to Murmur Voice</h1>
@@ -75,7 +78,10 @@
         <p class="description muted" data-i18n="onboard.permissionsNote">
           macOS will prompt you automatically. If it doesn't, open System Settings manually.
         </p>
-        <button class="btn primary next-btn" data-next="3" data-i18n="onboard.next">Next</button>
+        <div class="step-actions">
+          <button class="btn ghost back-btn" data-back="1" data-i18n="onboard.back">Back</button>
+          <button class="btn primary next-btn" data-next="3" data-i18n="onboard.next">Next</button>
+        </div>
       </div>
 
       <!-- Step 3: Model Download -->
@@ -100,7 +106,10 @@
           </div>
           <button id="btn-download" class="btn primary" data-i18n="onboard.downloadBtn">Download (~1.5 GB)</button>
         </div>
-        <button id="btn-step3-next" class="btn primary next-btn" data-next="4" style="display: none;" data-i18n="onboard.next">Next</button>
+        <div class="step-actions">
+          <button class="btn ghost back-btn" data-back="2" data-i18n="onboard.back">Back</button>
+          <button id="btn-step3-next" class="btn primary next-btn" data-next="4" style="display: none;" data-i18n="onboard.next">Next</button>
+        </div>
       </div>
 
       <!-- Step 4: Hotkey -->
@@ -117,7 +126,10 @@
           Choose a modifier key for push-to-talk. Hold it to record, release to transcribe.
         </p>
         <button id="onboard-ptt-record" class="record-btn">Left Option</button>
-        <button id="btn-done" class="btn primary next-btn" data-i18n="onboard.done">Done</button>
+        <div class="step-actions">
+          <button class="btn ghost back-btn" data-back="3" data-i18n="onboard.back">Back</button>
+          <button id="btn-done" class="btn primary next-btn" data-i18n="onboard.done">Done</button>
+        </div>
       </div>
 
       <!-- Step indicators -->

@@ -93,7 +93,7 @@ h1 {
 
 .description.muted {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 /* ── Locale Picker (Step 1) ── */
@@ -184,7 +184,7 @@ h1 {
 
 .permission-hint {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 /* ── Model Download (Step 3) ── */
@@ -293,6 +293,24 @@ h1 {
 .btn.primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.btn.ghost {
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.btn.ghost:hover {
+  color: var(--text-primary);
+}
+
+/* ── Step Actions (Back + Next) ── */
+
+.step-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 
 /* ── Step Dots ── */

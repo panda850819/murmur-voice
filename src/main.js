@@ -18,42 +18,48 @@ function setStatus(state, text) {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  // Load locale
+  try {
+    const s = await invoke("get_settings");
+    currentLocale = s.ui_locale || "en";
+  } catch (_) {}
+
   // Register ALL event listeners FIRST, before triggering any commands.
   await listen("model_download_progress", (event) => {
     const { downloaded, total } = event.payload;
     const pct = total > 0 ? (downloaded / total) * 100 : 0;
     progressContainer().style.display = "block";
     progressBar().style.width = pct + "%";
-    setStatus(null, "Downloading model... " + Math.round(pct) + "%");
+    setStatus(null, t("state.downloadingModel").replace("{pct}", Math.round(pct)));
   });
 
   await listen("model_ready", () => {
     progressContainer().style.display = "none";
     progressBar().style.width = "0%";
-    setStatus(null, "Ready");
+    setStatus(null, t("state.ready"));
   });
 
   await listen("recording_state_changed", (event) => {
     const state = event.payload;
     switch (state) {
       case "starting":
-        setStatus("recording", "Starting...");
+        setStatus("recording", t("state.starting"));
         transcription().textContent = "";
         break;
       case "recording":
-        setStatus("recording", "Listening...");
+        setStatus("recording", t("state.listening"));
         break;
       case "stopping":
-        setStatus("transcribing", "Stopping...");
+        setStatus("transcribing", t("state.stopping"));
         break;
       case "transcribing":
-        setStatus("transcribing", "Transcribing...");
+        setStatus("transcribing", t("state.transcribing"));
         break;
       case "processing":
-        setStatus("transcribing", "Processing...");
+        setStatus("transcribing", t("state.processing"));
         break;
       case "idle":
-        setStatus(null, "Ready");
+        setStatus(null, t("state.ready"));
         appBadge().classList.remove("visible");
         appBadge().textContent = "";
         break;
@@ -68,10 +74,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   await listen("transcription_complete", (event) => {
     const { text } = event.payload;
     transcription().textContent = text || "";
-    setStatus("done", "Done");
+    setStatus("done", t("state.done"));
 
     setTimeout(() => {
-      setStatus(null, "Ready");
+      setStatus(null, t("state.ready"));
     }, 2000);
   });
 
@@ -92,10 +98,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   await listen("recording_error", (event) => {
     const errorMsg = event.payload;
     transcription().textContent = errorMsg;
-    setStatus("error", "Error");
+    setStatus("error", t("state.error"));
 
     setTimeout(() => {
-      setStatus(null, "Ready");
+      setStatus(null, t("state.ready"));
       transcription().textContent = "";
     }, 3000);
   });
@@ -114,13 +120,13 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   if (!modelReady) {
     progressContainer().style.display = "block";
-    setStatus(null, "Downloading model...");
+    setStatus(null, t("state.downloadingModel").replace(" {pct}%", ""));
     // Fire and forget — progress updates come via events above.
     invoke("download_model_cmd").catch((err) => {
-      setStatus("error", "Download failed");
+      setStatus("error", t("state.downloadFailed"));
       transcription().textContent = String(err);
     });
   } else {
-    setStatus(null, "Ready");
+    setStatus(null, t("state.ready"));
   }
 });

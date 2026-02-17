@@ -47,7 +47,7 @@ function setCharCount(text) {
     el.textContent = "";
     return;
   }
-  el.textContent = text.length + " chars";
+  el.textContent = t("preview.nChars").replace("{n}", text.length);
 }
 
 function setAppBadge(name) {
@@ -85,7 +85,7 @@ function wordDiff(original, edited) {
 
 function showDictSuggest(word) {
   pendingSuggestion = word;
-  dictSuggestText().textContent = `Add "${word}" to dictionary?`;
+  dictSuggestText().textContent = t("preview.dictPrompt").replace("{word}", word);
   dictSuggest().style.display = "";
 }
 
@@ -100,8 +100,8 @@ function reset() {
     clearInterval(dotsInterval);
     dotsInterval = null;
   }
-  setHeader("Listening...", false);
-  setText("Listening...", "placeholder");
+  setHeader(t("state.listening"), false);
+  setText(t("state.listening"), "placeholder");
   setCharCount("");
   setAppBadge(null);
   disableEditing();
@@ -117,16 +117,22 @@ function scrollToBottom() {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  // Load locale
+  try {
+    const s = await invoke("get_settings");
+    currentLocale = s.ui_locale || "en";
+  } catch (_) {}
+
   // Copy button handler
   copyBtn().addEventListener("click", async () => {
     const btn = copyBtn();
     const text = previewText().textContent;
     try {
       await invoke("copy_to_clipboard", { text });
-      btn.textContent = "Copied!";
+      btn.textContent = t("preview.copied");
       btn.classList.add("copied");
       setTimeout(() => {
-        btn.textContent = "Copy";
+        btn.textContent = t("preview.copy");
         btn.classList.remove("copied");
         invoke("hide_preview").catch(() => {});
       }, 1500);
@@ -140,7 +146,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (!pendingSuggestion) return;
     try {
       await invoke("add_dictionary_term", { term: pendingSuggestion });
-      dictSuggestText().textContent = "Added!";
+      dictSuggestText().textContent = t("preview.dictAdded");
       setTimeout(() => hideDictSuggest(), 1200);
     } catch (_) {
       hideDictSuggest();
@@ -182,17 +188,17 @@ window.addEventListener("DOMContentLoaded", async () => {
         reset();
         break;
       case "recording":
-        setHeader("Listening...", false);
+        setHeader(t("state.listening"), false);
         break;
       case "stopping":
-        setHeader("Stopping...", true);
+        setHeader(t("state.stopping"), true);
         break;
       case "transcribing":
-        setHeader("Transcribing...", true);
+        setHeader(t("state.transcribing"), true);
         setText("", null);
         break;
       case "processing":
-        setHeader("Processing...", true);
+        setHeader(t("state.processing"), true);
         break;
       case "idle":
         // Auto-hide is handled by the transcription_complete handler below.
@@ -214,13 +220,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     currentMode = mode;
 
     if (!text || text.trim().length === 0) {
-      setHeader("Done", false);
-      setText("No speech detected", "no-speech");
+      setHeader(t("state.done"), false);
+      setText(t("preview.noSpeech"), "no-speech");
       setCharCount("");
       copyBtn().style.display = "none";
       disableEditing();
     } else {
-      setHeader("Done", false);
+      setHeader(t("state.done"), false);
       setText(text, null);
       setCharCount(text);
       scrollToBottom();

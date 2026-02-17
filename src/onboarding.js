@@ -33,7 +33,7 @@ function goToStep(n) {
 function startPttRecording() {
   isRecording = true;
   const btn = el("onboard-ptt-record");
-  btn.textContent = "Press a key...";
+  btn.textContent = t("ptt.pressKey");
   btn.classList.add("recording");
 }
 
@@ -63,6 +63,14 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
+  // Back buttons
+  document.querySelectorAll(".back-btn[data-back]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const back = parseInt(btn.dataset.back, 10);
+      goToStep(back);
+    });
+  });
+
   // Step 3: Model download
   const modelReady = await invoke("is_model_ready");
   if (modelReady) {
@@ -72,7 +80,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   el("btn-download").addEventListener("click", async () => {
     el("btn-download").disabled = true;
-    el("btn-download").textContent = "Downloading...";
+    el("btn-download").textContent = t("onboard.downloading");
     el("model-progress-wrap").style.display = "flex";
 
     try {
@@ -82,7 +90,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       el("btn-step3-next").style.display = "";
     } catch (e) {
       el("btn-download").disabled = false;
-      el("btn-download").textContent = "Retry Download";
+      el("btn-download").textContent = t("onboard.retryDownload");
     }
   });
 
