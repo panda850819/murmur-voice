@@ -4,6 +4,18 @@ All notable changes to Murmur Voice are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- UI language switching (English / 繁體中文) with DOM-based i18n
+- Changelog button in Settings (opens GitHub Releases)
+- Vision tagline and Roadmap link in settings footer
+
+### Changed
+- Preview auto-hide moved from backend 10s thread timer to frontend 5s JS timer; editing cancels timer, blur restarts it
+- New `hide_overlay_windows` Tauri command (frontend-driven hide)
+
+### Fixed
+- Update badge layout shift — added min-width and centered text
+
 ## [0.3.0] - 2026-02-17
 
 ### Added

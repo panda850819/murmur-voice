@@ -8,31 +8,32 @@
     <link rel="stylesheet" href="settings.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Murmur Voice Settings</title>
+    <script src="/i18n.js"></script>
     <script src="/settings.js" defer></script>
   </head>
   <body>
     <div id="settings-app">
 
       <header class="header">
-        <h1>Preferences</h1>
+        <h1 data-i18n="header.title">Preferences</h1>
         <span class="version">v0.3.0</span>
       </header>
 
       <section class="group">
-        <div class="group-label">Input</div>
+        <div class="group-label" data-i18n="group.input">Input</div>
         <div class="group-card">
           <div class="row">
-            <span class="row-label">Push-to-Talk</span>
+            <span class="row-label" data-i18n="row.ptt">Push-to-Talk</span>
             <button id="ptt-record" class="record-btn">Left Option</button>
           </div>
         </div>
       </section>
 
       <section class="group">
-        <div class="group-label">Transcription</div>
+        <div class="group-label" data-i18n="group.transcription">Transcription</div>
         <div class="group-card">
           <div class="row">
-            <span class="row-label">Language</span>
+            <span class="row-label" data-i18n="row.language">Language</span>
             <select id="language">
               <option value="auto">Auto Detect</option>
               <option value="en">English</option>
@@ -52,14 +53,14 @@
             </select>
           </div>
           <div class="row">
-            <span class="row-label">Engine</span>
+            <span class="row-label" data-i18n="row.engine">Engine</span>
             <select id="engine">
               <option value="local">Local (Whisper)</option>
               <option value="groq">Groq API</option>
             </select>
           </div>
           <div class="row" id="model-section">
-            <span class="row-label">Model</span>
+            <span class="row-label" data-i18n="row.model">Model</span>
             <select id="model">
               <option value="large-v3-turbo">Large V3 Turbo</option>
               <option value="medium">Medium</option>
@@ -69,16 +70,16 @@
           </div>
           <div class="row groq-hint" id="groq-section" style="display: none;">
             <span class="row-label"></span>
-            <span class="row-hint">API Key is in AI Processing below</span>
+            <span class="row-hint" data-i18n="hint.groqKey">API Key is in AI Processing below</span>
           </div>
           <div class="dict-section">
             <div class="row">
-              <span class="row-label">Dictionary</span>
+              <span class="row-label" data-i18n="row.dict">Dictionary</span>
               <span class="dict-count" id="dict-count"></span>
             </div>
             <div class="dict-input-wrap">
               <div class="dict-tags" id="dict-tags"></div>
-              <input type="text" id="dict-input" class="dict-input" placeholder="Type a term and press Enter" spellcheck="false" />
+              <input type="text" id="dict-input" class="dict-input" placeholder="Type a term and press Enter" data-i18n="dict.placeholder" spellcheck="false" />
             </div>
             <div id="dict-undo" class="dict-undo" style="display:none;">
               <span id="dict-undo-text" class="dict-undo-text"></span>
@@ -89,10 +90,10 @@
       </section>
 
       <section class="group">
-        <div class="group-label">AI Processing</div>
+        <div class="group-label" data-i18n="group.ai">AI Processing</div>
         <div class="group-card">
           <div class="row">
-            <span class="row-label">LLM Post-Processing</span>
+            <span class="row-label" data-i18n="row.llm">LLM Post-Processing</span>
             <label class="toggle">
               <input type="checkbox" id="llm-enabled" />
               <span class="toggle-track"></span>
@@ -100,7 +101,7 @@
           </div>
           <div id="llm-settings" style="display: none;">
             <div class="row">
-              <span class="row-label">Provider</span>
+              <span class="row-label" data-i18n="row.provider">Provider</span>
               <select id="llm-provider">
                 <option value="groq">Groq (Cloud)</option>
                 <option value="ollama">Ollama (Local)</option>
@@ -109,11 +110,11 @@
             </div>
             <div id="groq-llm-section">
               <div class="row">
-                <span class="row-label">API Key</span>
+                <span class="row-label" data-i18n="row.apiKey">API Key</span>
                 <input type="password" id="groq-api-key" placeholder="gsk_..." spellcheck="false" />
               </div>
               <div class="row">
-                <span class="row-label">Model</span>
+                <span class="row-label" data-i18n="row.model">Model</span>
                 <select id="llm-model">
                   <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
                   <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fast)</option>
@@ -122,31 +123,31 @@
             </div>
             <div id="ollama-section" style="display: none;">
               <div class="row">
-                <span class="row-label">URL</span>
+                <span class="row-label" data-i18n="row.url">URL</span>
                 <input type="text" id="ollama-url" placeholder="http://localhost:11434" spellcheck="false" />
               </div>
               <div class="row">
-                <span class="row-label">Model</span>
+                <span class="row-label" data-i18n="row.model">Model</span>
                 <input type="text" id="ollama-model" placeholder="llama3.2" spellcheck="false" />
               </div>
             </div>
             <div id="custom-llm-section" style="display: none;">
               <div class="row">
-                <span class="row-label">Endpoint</span>
+                <span class="row-label" data-i18n="row.endpoint">Endpoint</span>
                 <input type="text" id="custom-llm-url" placeholder="https://..." spellcheck="false" />
               </div>
               <div class="row">
-                <span class="row-label">API Key</span>
+                <span class="row-label" data-i18n="row.apiKey">API Key</span>
                 <input type="password" id="custom-llm-key" placeholder="sk-..." spellcheck="false" />
               </div>
               <div class="row">
-                <span class="row-label">Model</span>
+                <span class="row-label" data-i18n="row.model">Model</span>
                 <input type="text" id="custom-llm-model" placeholder="model-name" spellcheck="false" />
               </div>
             </div>
           </div>
           <div class="row">
-            <span class="row-label">App-Aware Style</span>
+            <span class="row-label" data-i18n="row.appAware">App-Aware Style</span>
             <label class="toggle">
               <input type="checkbox" id="app-aware-style" />
               <span class="toggle-track"></span>
@@ -156,23 +157,23 @@
       </section>
 
       <section class="group">
-        <div class="group-label">Recording</div>
+        <div class="group-label" data-i18n="group.recording">Recording</div>
         <div class="group-card">
           <div class="row">
-            <span class="row-label">Mode</span>
+            <span class="row-label" data-i18n="row.mode">Mode</span>
             <div class="segmented" id="recording-mode">
-              <button data-value="hold" class="seg-btn active">Hold to Talk</button>
-              <button data-value="toggle" class="seg-btn">Press to Toggle</button>
+              <button data-value="hold" class="seg-btn active" data-i18n="btn.holdToTalk">Hold to Talk</button>
+              <button data-value="toggle" class="seg-btn" data-i18n="btn.pressToToggle">Press to Toggle</button>
             </div>
           </div>
         </div>
       </section>
 
       <section class="group">
-        <div class="group-label">Appearance</div>
+        <div class="group-label" data-i18n="group.appearance">Appearance</div>
         <div class="group-card">
           <div class="row">
-            <span class="row-label">Opacity</span>
+            <span class="row-label" data-i18n="row.opacity">Opacity</span>
             <div class="slider-control">
               <input type="range" id="opacity" min="0.3" max="1.0" step="0.01" />
               <span id="opacity-value" class="slider-readout">78%</span>
@@ -182,27 +183,43 @@
       </section>
 
       <section class="group">
-        <div class="group-label">System</div>
+        <div class="group-label" data-i18n="group.system">System</div>
         <div class="group-card">
           <div class="row">
-            <span class="row-label">Launch at Login</span>
+            <span class="row-label" data-i18n="row.autoStart">Launch at Login</span>
             <label class="toggle">
               <input type="checkbox" id="auto-start" />
               <span class="toggle-track"></span>
             </label>
           </div>
           <div class="row">
-            <span class="row-label">Updates</span>
-            <button id="btn-check-update" class="update-btn">Check for Updates</button>
+            <span class="row-label" data-i18n="row.uiLocale">UI Language</span>
+            <select id="ui-locale">
+              <option value="en">English</option>
+              <option value="zh-TW">繁體中文</option>
+            </select>
+          </div>
+          <div class="row">
+            <span class="row-label" data-i18n="row.updates">Updates</span>
+            <button id="btn-check-update" class="update-btn" data-i18n="btn.checkUpdate">Check for Updates</button>
+          </div>
+          <div class="row">
+            <span class="row-label" data-i18n="row.changelog">What's New</span>
+            <button id="btn-changelog" class="link-btn" data-i18n="btn.changelog">Changelog</button>
           </div>
         </div>
       </section>
 
       <footer class="footer">
+        <div class="vision">
+          <span data-i18n="vision.tagline">Your voice, unheard by others.</span>
+          <span>&middot;</span>
+          <button id="btn-roadmap" class="link-btn" data-i18n="vision.roadmap">Roadmap</button>
+        </div>
         <div id="save-status" class="save-status"></div>
         <div class="actions">
-          <button id="btn-cancel" class="btn ghost">Cancel</button>
-          <button id="btn-save" class="btn primary">Save</button>
+          <button id="btn-cancel" class="btn ghost" data-i18n="btn.cancel">Cancel</button>
+          <button id="btn-save" class="btn primary" data-i18n="btn.save">Save</button>
         </div>
       </footer>
 

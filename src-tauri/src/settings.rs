@@ -25,6 +25,10 @@ fn default_ollama_model() -> String {
     "llama3.2".to_string()
 }
 
+fn default_en() -> String {
+    "en".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Settings {
     pub ptt_key: String,
@@ -58,6 +62,8 @@ pub(crate) struct Settings {
     pub custom_llm_model: String,
     #[serde(default = "default_true")]
     pub app_aware_style: bool,
+    #[serde(default = "default_en")]
+    pub ui_locale: String,
 }
 
 impl Default for Settings {
@@ -82,6 +88,7 @@ impl Default for Settings {
             custom_llm_key: String::new(),
             custom_llm_model: String::new(),
             app_aware_style: true,
+            ui_locale: default_en(),
         }
     }
 }
@@ -202,6 +209,22 @@ mod tests {
         assert_eq!(s.ollama_url, "http://localhost:11434");
         assert_eq!(s.ollama_model, "llama3.2");
         assert!(s.custom_llm_url.is_empty());
+    }
+
+    #[test]
+    fn test_deserialize_without_ui_locale() {
+        let json = r#"{
+            "ptt_key": "AltLeft",
+            "language": "auto",
+            "engine": "local",
+            "model": "large-v3-turbo",
+            "groq_api_key": "",
+            "window_opacity": 0.78,
+            "auto_start": false
+        }"#;
+
+        let s: Settings = serde_json::from_str(json).unwrap();
+        assert_eq!(s.ui_locale, "en");
     }
 
     #[test]

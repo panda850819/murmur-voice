@@ -164,6 +164,15 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (newWords.length > 0) {
       showDictSuggest(newWords[0]);
     }
+
+    // Restart auto-hide after editing
+    if (currentMode === "pasted") {
+      autoHideTimer = setTimeout(async () => {
+        try {
+          await invoke("hide_overlay_windows");
+        } catch (_) {}
+      }, 5000);
+    }
   });
 
   await listen("recording_state_changed", (event) => {
@@ -186,7 +195,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         setHeader("Processing...", true);
         break;
       case "idle":
-        // Auto-hide is handled by the backend or result display.
+        // Auto-hide is handled by the transcription_complete handler below.
         break;
     }
   });
@@ -218,11 +227,16 @@ window.addEventListener("DOMContentLoaded", async () => {
       originalText = text;
       copyBtn().style.display = "";
       enableEditing();
-    }
 
-    // Backend handles 10s auto-hide for "pasted" mode.
-    // No frontend timer needed — backend emits hide.
-    // "clipboard" mode: no auto-hide at all.
+      // Auto-hide: 5s for pasted mode, cancelled by editing
+      if (mode === "pasted" && text && text.trim().length > 0) {
+        autoHideTimer = setTimeout(async () => {
+          try {
+            await invoke("hide_overlay_windows");
+          } catch (_) {}
+        }, 5000);
+      }
+    }
   });
 
   await listen("foreground_app_info", (event) => {

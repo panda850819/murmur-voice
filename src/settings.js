@@ -215,6 +215,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     el("custom-llm-model").value = s.custom_llm_model || "";
     updateEngineVisibility();
     updateLlmVisibility();
+    // Apply locale
+    el("ui-locale").value = s.ui_locale || "en";
+    applyLocale(s.ui_locale || "en");
   } catch (e) {
     showStatus("Failed to load settings", true);
   }
@@ -239,6 +242,11 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // LLM provider
   el("llm-provider").addEventListener("change", updateLlmProviderVisibility);
+
+  // UI locale
+  el("ui-locale").addEventListener("change", () => {
+    applyLocale(el("ui-locale").value);
+  });
 
   // Recording mode segmented control
   document.querySelectorAll("#recording-mode .seg-btn").forEach((btn) => {
@@ -297,6 +305,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       custom_llm_url: el("custom-llm-url").value,
       custom_llm_key: el("custom-llm-key").value,
       custom_llm_model: el("custom-llm-model").value,
+      ui_locale: el("ui-locale").value,
     };
 
     try {
@@ -331,6 +340,16 @@ window.addEventListener("DOMContentLoaded", async () => {
       btn.disabled = false;
       setTimeout(() => { btn.textContent = "Check for Updates"; }, 3000);
     }
+  });
+
+  // Changelog
+  el("btn-changelog").addEventListener("click", async () => {
+    await invoke("open_url", { url: "https://github.com/panda850819/murmur-voice/releases" });
+  });
+
+  // Roadmap
+  el("btn-roadmap").addEventListener("click", async () => {
+    await invoke("open_url", { url: "https://github.com/panda850819/murmur-voice/blob/main/ROADMAP.md" });
   });
 
   // Cancel

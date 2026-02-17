@@ -441,21 +441,6 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         serde_json::json!({ "text": text, "mode": output_mode }),
     );
 
-    // Auto-hide: 10s for pasted mode, no timer for clipboard mode.
-    // The generation counter cancels this timer if a new recording starts.
-    if output_mode == "pasted" {
-        let generation = state.preview_generation.load(Ordering::SeqCst);
-        let app_clone = app.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_secs(10));
-            let ms = app_clone.state::<MurmurState>();
-            if ms.preview_generation.load(Ordering::SeqCst) == generation {
-                hide_preview_window(&app_clone);
-                hide_main_window(&app_clone);
-            }
-        });
-    }
-
     Ok(text)
 }
 
@@ -641,6 +626,12 @@ fn hide_preview(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
+fn hide_overlay_windows(app: tauri::AppHandle) {
+    hide_preview_window(&app);
+    hide_main_window(&app);
+}
+
+#[tauri::command]
 fn copy_to_clipboard(text: String) -> Result<(), String> {
     clipboard::copy_only(&text).map_err(|e| e.to_string())
 }
@@ -709,6 +700,7 @@ pub fn run() {
             save_settings,
             open_settings,
             hide_preview,
+            hide_overlay_windows,
             complete_onboarding,
             copy_to_clipboard,
             add_dictionary_term,
