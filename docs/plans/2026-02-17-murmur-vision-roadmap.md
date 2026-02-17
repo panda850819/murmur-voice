@@ -59,13 +59,15 @@ Rust is not just a technical choice. It's the trust architecture:
 
 ---
 
-## Current State (v0.2.1)
+## Current State (v0.3.0)
 
 ### What We Have
 
 - Local Whisper transcription (whisper-rs → whisper.cpp, Metal GPU on macOS, CUDA on Windows)
 - Groq cloud transcription (whisper-large-v3-turbo)
-- Groq LLM post-processing (filler removal, punctuation, Traditional Chinese)
+- Multi-provider LLM enhancement via TextEnhancer trait (Groq, Ollama, Custom OpenAI-compatible)
+- Full-chain offline mode: local Whisper + Ollama
+- Data flow indicator (Local/Cloud badge in preview window)
 - Smart clipboard (input field detection, clipboard-only fallback)
 - Personal dictionary
 - Hold + Toggle recording modes
@@ -74,60 +76,40 @@ Rust is not just a technical choice. It's the trust architecture:
 
 ### What's Missing to Reach End Goal
 
-1. Only 1 LLM provider (Groq) — no offline AI enhancement
-2. Only whisper.cpp for local inference — same speed as every competitor
-3. No engine abstraction — adding new engines requires if-else branching
-4. No data sovereignty features (history, export, privacy dashboard)
-5. No context awareness (screen, clipboard context for LLM)
-6. No streaming transcription (current "live preview" is 2s peek intervals)
+1. Only whisper.cpp for local inference — same speed as every competitor
+2. No data sovereignty features (history, export, privacy dashboard)
+3. No context awareness (screen, clipboard context for LLM)
+4. No streaming transcription (current "live preview" is 2s peek intervals)
 
 ---
 
 ## Roadmap
 
-### Phase 1: Engine Abstraction + Local-First (v0.3)
+### Phase 1: Engine Abstraction + Local-First (v0.3) -- COMPLETED
 
 **Theme**: Build the foundation. Make offline-everything possible.
 
-#### Engine Trait System
+#### Completed
 
-```rust
-#[async_trait]
-pub trait TranscriptionEngine: Send + Sync {
-    fn name(&self) -> &str;
-    fn supports_streaming(&self) -> bool;
-    async fn transcribe(&self, audio: &AudioBuffer, config: &TranscribeConfig) -> Result<Transcript>;
-}
+- `TextEnhancer` trait (`Send + Sync`) with `name()`, `is_local()`, `enhance()` methods
+- `OpenAICompatibleEnhancer` struct with `groq()`, `ollama()`, `custom()` factory presets
+- `create_enhancer(&Settings) -> Option<Box<dyn TextEnhancer>>` factory function
+- Provider dropdown in Settings UI (Groq/Ollama/Custom) with conditional config sections
+- Data flow indicator: Local/Cloud badges in preview window
+- 6 new settings fields with backward-compatible serde defaults
+- 16 unit tests (state, LLM, settings)
 
-#[async_trait]
-pub trait LLMProvider: Send + Sync {
-    fn name(&self) -> &str;
-    fn is_local(&self) -> bool;
-    async fn enhance(&self, text: &str, context: EnhanceContext) -> Result<String>;
-}
-```
-
-- Compile-time polymorphism via generics where possible, dynamic dispatch only when needed
-- New engines added by implementing traits, no modification to core pipeline
-- Each engine self-reports `is_local()` for UI data-flow indicators
-
-#### New Engines
+#### Remaining for Future Phases
 
 | Engine | Type | Priority | Value |
 |--------|------|----------|-------|
-| Ollama | LLM (local) | P0 | Enables full-chain offline. Key differentiator |
-| OpenAI-compatible endpoint | LLM (cloud) | P1 | Self-hosted LLM support, data sovereignty |
 | Distil-Whisper | Transcription (local) | P1 | 4-6x faster than whisper-large-v3 |
 | Moonshine | Transcription (local) | P2 | 5x faster than whisper-tiny, best for live preview |
-
-#### Data Flow Indicator
-
-- UI clearly shows "Local" vs "Cloud" badge during transcription and AI enhancement
-- Settings page shows which engines require network
+| TranscriptionEngine trait | Transcription abstraction | P1 | Same trait pattern as TextEnhancer |
 
 #### Deliverable
 
-Users can run Murmur with zero network dependency: local Whisper + local Ollama. The "fully offline, fully open-source voice-to-text with AI enhancement" story becomes real.
+Users can run Murmur with zero network dependency: local Whisper + local Ollama. The "fully offline, fully open-source voice-to-text with AI enhancement" story is now real.
 
 ---
 
@@ -241,6 +223,7 @@ The tagline becomes reality: "From microphone to text, every line of code is Rus
 | Plan | Status | Notes |
 |------|--------|-------|
 | `2026-02-14-dictionary-undo-smart-clipboard` | Completed (v0.2.1) | All 4 features shipped |
+| `2026-02-17-v03-engine-abstraction` | Completed (v0.3.0) | TextEnhancer trait, multi-provider LLM, data flow indicator |
 
 ---
 

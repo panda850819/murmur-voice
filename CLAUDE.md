@@ -18,7 +18,7 @@ pnpm tauri build --features cuda
 cd src-tauri
 cargo check                                       # fast iteration
 cargo clippy --all-targets -- -D warnings          # lint (zero warnings policy)
-cargo test                                         # 6 tests in state.rs
+cargo test                                         # 16 tests (state.rs, llm.rs, settings.rs)
 cargo test test_valid_forward_transitions          # run a single test
 ```
 
@@ -37,7 +37,7 @@ Frontend (src/)                    Backend (src-tauri/src/)
                                    ├── model.rs      HuggingFace model download
                                    ├── settings.rs   JSON persistence + key mapping
                                    ├── state.rs      recording state machine
-                                   └── llm.rs        Groq LLM API post-processing
+                                   └── llm.rs        TextEnhancer trait + multi-provider LLM
 ```
 
 **IPC**: Frontend calls backend via `invoke("command")` (uses `window.__TAURI__.core.invoke` via `withGlobalTauri`), backend pushes to frontend via `app.emit("event", payload)`.
@@ -78,7 +78,7 @@ Hotkey release → do_stop_recording()
   → audio.stop()
   → if engine=groq: llm::transcribe_groq() (cloud Whisper API)
     else: whisper.transcribe() (local GPU)
-  → if llm_enabled: llm::process_text() (Groq LLM, cleans filler words/punctuation/繁簡)
+  → if llm_enabled: create_enhancer() → TextEnhancer::enhance() (Groq/Ollama/Custom)
   → clipboard.insert_text(paste simulation) → emit result → preview window
 ```
 
@@ -89,7 +89,19 @@ Two recording modes: **Hold** (press=start, release=stop) and **Toggle** (press 
 ## Transcription Engines
 
 - **Local**: whisper-rs (Metal GPU on macOS). Live preview enabled. Model stored at app data dir `/models/`.
-- **Groq**: Cloud Whisper API (`whisper-large-v3-turbo`). Audio encoded to WAV via `hound`, sent as multipart form. No live preview (too expensive). Same `groq_api_key` used for both Whisper and LLM.
+- **Groq**: Cloud Whisper API (`whisper-large-v3-turbo`). Audio encoded to WAV via `hound`, sent as multipart form. No live preview (too expensive). `groq_api_key` shared between Whisper transcription and Groq LLM enhancement.
+
+## LLM Enhancement (Multi-Provider)
+
+`TextEnhancer` trait (`Send + Sync`) with `name()`, `is_local()`, `enhance()` methods. Single implementation `OpenAICompatibleEnhancer` with three factory presets:
+
+- **Groq**: `OpenAICompatibleEnhancer::groq()` — cloud, requires `groq_api_key`
+- **Ollama**: `OpenAICompatibleEnhancer::ollama()` — local, no auth, skips `frequency_penalty`
+- **Custom**: `OpenAICompatibleEnhancer::custom()` — any OpenAI-compatible endpoint
+
+`create_enhancer(&Settings) -> Option<Box<dyn TextEnhancer>>` factory returns `None` if disabled or config missing. `enhance()` is sync (creates internal `tokio::runtime::Runtime` for HTTP calls).
+
+Settings fields: `llm_provider` (groq|ollama|custom), `ollama_url`, `ollama_model`, `custom_llm_url`, `custom_llm_key`, `custom_llm_model`. All use `#[serde(default)]` for backward compatibility.
 
 ## Anti-Hallucination (Local Whisper)
 
@@ -110,7 +122,7 @@ Two recording modes: **Hold** (press=start, release=stop) and **Toggle** (press 
 ## Gotchas
 
 - **New windows** must be added to `src-tauri/capabilities/default.json` `"windows"` array or they can't invoke any Tauri commands
-- **Groq API key** is shared between Whisper transcription and LLM post-processing — stored in `settings.groq_api_key`
+- **Groq API key** is shared between Whisper transcription and Groq LLM enhancement — stored in `settings.groq_api_key`
 - **`frontapp_macos.rs` uses raw Objective-C FFI** (objc_msgSend) — no crate dependency, but `unsafe` throughout
 - **`frontapp_windows.rs` uses `windows` crate** — `PWSTR` wrapper required for Win32 string buffer APIs
 - **Live transcription** only runs for local engine; Groq mode skips it entirely (cost)
