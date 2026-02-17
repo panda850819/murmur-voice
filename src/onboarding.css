@@ -54,7 +54,7 @@ html, body {
   position: relative;
 }
 
-/* ── Steps ── */
+/* -- Steps -- */
 
 .step {
   display: none;
@@ -96,7 +96,7 @@ h1 {
   color: var(--text-secondary);
 }
 
-/* ── Locale Picker (Step 1) ── */
+/* -- Locale Picker (Step 1) -- */
 
 .locale-picker {
   display: flex;
@@ -128,32 +128,7 @@ h1 {
   box-shadow: var(--shadow-btn);
 }
 
-/* ── Highlights (Step 1) ── */
-
-.highlights {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: flex-start;
-  width: 100%;
-  padding: 0 20px;
-}
-
-.highlight-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.highlight-icon {
-  font-size: 6px;
-  color: var(--accent);
-}
-
-/* ── Permissions (Step 2) ── */
+/* -- Permissions (Step 2) -- */
 
 .permission-list {
   display: flex;
@@ -187,7 +162,89 @@ h1 {
   color: var(--text-secondary);
 }
 
-/* ── Model Download (Step 3) ── */
+/* -- Engine Cards (Step 3) -- */
+
+.engine-cards {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.engine-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 10px;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.engine-card:hover {
+  border-color: var(--accent-dim);
+}
+
+.engine-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.engine-card-icon {
+  color: var(--text-secondary);
+  transition: color 0.15s ease;
+}
+
+.engine-card.active .engine-card-icon {
+  color: var(--accent);
+}
+
+.engine-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.engine-card-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.3;
+}
+
+/* -- Groq API Key -- */
+
+.groq-key-wrap {
+  width: 100%;
+}
+
+.groq-key-wrap input {
+  width: 100%;
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.groq-key-wrap input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.groq-key-wrap input::placeholder {
+  color: var(--text-muted);
+}
+
+/* -- Model Download (Step 4) -- */
 
 .model-status {
   width: 100%;
@@ -229,7 +286,7 @@ h1 {
   text-align: right;
 }
 
-/* ── Record Button (Step 4) ── */
+/* -- Record Button (Step 5) -- */
 
 .record-btn {
   font-family: inherit;
@@ -263,7 +320,7 @@ h1 {
   50% { opacity: 0.7; }
 }
 
-/* ── Buttons ── */
+/* -- Buttons -- */
 
 .btn {
   font-family: inherit;
@@ -305,7 +362,7 @@ h1 {
   color: var(--text-primary);
 }
 
-/* ── Step Actions (Back + Next) ── */
+/* -- Step Actions (Back + Next) -- */
 
 .step-actions {
   display: flex;
@@ -313,7 +370,7 @@ h1 {
   align-items: center;
 }
 
-/* ── Step Dots ── */
+/* -- Step Dots -- */
 
 .step-dots {
   position: absolute;

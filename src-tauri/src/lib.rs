@@ -770,7 +770,7 @@ pub fn run() {
                     tauri::WebviewUrl::App("onboarding.html".into()),
                 )
                 .title("Welcome to Murmur Voice")
-                .inner_size(560.0, 480.0)
+                .inner_size(560.0, 520.0)
                 .resizable(false)
                 .center()
                 .build();
