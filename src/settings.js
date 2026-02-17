@@ -89,9 +89,19 @@ function updateEngineVisibility() {
   el("groq-section").style.display = isLocal ? "none" : "flex";
 }
 
+function updateLlmProviderVisibility() {
+  const provider = el("llm-provider").value;
+  el("groq-llm-section").style.display = provider === "groq" ? "block" : "none";
+  el("ollama-section").style.display = provider === "ollama" ? "block" : "none";
+  el("custom-llm-section").style.display = provider === "custom" ? "block" : "none";
+}
+
 function updateLlmVisibility() {
   const enabled = el("llm-enabled").checked;
-  el("llm-model-section").style.display = enabled ? "flex" : "none";
+  el("llm-settings").style.display = enabled ? "block" : "none";
+  if (enabled) {
+    updateLlmProviderVisibility();
+  }
 }
 
 function showStatus(message, isError) {
@@ -197,6 +207,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     el("llm-enabled").checked = s.llm_enabled || false;
     el("llm-model").value = s.llm_model || "llama-3.3-70b-versatile";
     el("app-aware-style").checked = s.app_aware_style !== false;
+    el("llm-provider").value = s.llm_provider || "groq";
+    el("ollama-url").value = s.ollama_url || "http://localhost:11434";
+    el("ollama-model").value = s.ollama_model || "llama3.2";
+    el("custom-llm-url").value = s.custom_llm_url || "";
+    el("custom-llm-key").value = s.custom_llm_key || "";
+    el("custom-llm-model").value = s.custom_llm_model || "";
     updateEngineVisibility();
     updateLlmVisibility();
   } catch (e) {
@@ -220,6 +236,9 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // LLM toggle
   el("llm-enabled").addEventListener("change", updateLlmVisibility);
+
+  // LLM provider
+  el("llm-provider").addEventListener("change", updateLlmProviderVisibility);
 
   // Recording mode segmented control
   document.querySelectorAll("#recording-mode .seg-btn").forEach((btn) => {
@@ -272,6 +291,12 @@ window.addEventListener("DOMContentLoaded", async () => {
       llm_enabled: el("llm-enabled").checked,
       llm_model: el("llm-model").value,
       app_aware_style: el("app-aware-style").checked,
+      llm_provider: el("llm-provider").value,
+      ollama_url: el("ollama-url").value,
+      ollama_model: el("ollama-model").value,
+      custom_llm_url: el("custom-llm-url").value,
+      custom_llm_key: el("custom-llm-key").value,
+      custom_llm_model: el("custom-llm-model").value,
     };
 
     try {

@@ -67,9 +67,9 @@
               <option value="base">Base</option>
             </select>
           </div>
-          <div class="row" id="groq-section" style="display: none;">
-            <span class="row-label">API Key</span>
-            <input type="password" id="groq-api-key" placeholder="gsk_..." spellcheck="false" />
+          <div class="row groq-hint" id="groq-section" style="display: none;">
+            <span class="row-label"></span>
+            <span class="row-hint">API Key is in AI Processing below</span>
           </div>
           <div class="dict-section">
             <div class="row">
@@ -98,12 +98,52 @@
               <span class="toggle-track"></span>
             </label>
           </div>
-          <div class="row" id="llm-model-section" style="display: none;">
-            <span class="row-label">Model</span>
-            <select id="llm-model">
-              <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
-              <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fast)</option>
-            </select>
+          <div id="llm-settings" style="display: none;">
+            <div class="row">
+              <span class="row-label">Provider</span>
+              <select id="llm-provider">
+                <option value="groq">Groq (Cloud)</option>
+                <option value="ollama">Ollama (Local)</option>
+                <option value="custom">Custom Endpoint</option>
+              </select>
+            </div>
+            <div id="groq-llm-section">
+              <div class="row">
+                <span class="row-label">API Key</span>
+                <input type="password" id="groq-api-key" placeholder="gsk_..." spellcheck="false" />
+              </div>
+              <div class="row">
+                <span class="row-label">Model</span>
+                <select id="llm-model">
+                  <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
+                  <option value="llama-3.1-8b-instant">Llama 3.1 8B (Fast)</option>
+                </select>
+              </div>
+            </div>
+            <div id="ollama-section" style="display: none;">
+              <div class="row">
+                <span class="row-label">URL</span>
+                <input type="text" id="ollama-url" placeholder="http://localhost:11434" spellcheck="false" />
+              </div>
+              <div class="row">
+                <span class="row-label">Model</span>
+                <input type="text" id="ollama-model" placeholder="llama3.2" spellcheck="false" />
+              </div>
+            </div>
+            <div id="custom-llm-section" style="display: none;">
+              <div class="row">
+                <span class="row-label">Endpoint</span>
+                <input type="text" id="custom-llm-url" placeholder="https://..." spellcheck="false" />
+              </div>
+              <div class="row">
+                <span class="row-label">API Key</span>
+                <input type="password" id="custom-llm-key" placeholder="sk-..." spellcheck="false" />
+              </div>
+              <div class="row">
+                <span class="row-label">Model</span>
+                <input type="text" id="custom-llm-model" placeholder="model-name" spellcheck="false" />
+              </div>
+            </div>
           </div>
           <div class="row">
             <span class="row-label">App-Aware Style</span>

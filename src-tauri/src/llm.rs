@@ -138,75 +138,6 @@ fn restore_english(text: &str, placeholders: &[(String, String)]) -> String {
     result
 }
 
-pub(crate) async fn process_text(
-    api_key: &str,
-    model: &str,
-    text: &str,
-    style: &str,
-) -> Result<String, LlmError> {
-    // Protect English words in mixed-language text from LLM translation
-    let (protected_text, placeholders) = protect_english(text);
-
-    let client = reqwest::Client::new();
-
-    // Cap max_tokens relative to input length — cleaned text should never be much longer.
-    // Use char count * 2 (generous for CJK + punctuation fixes) with floor 256, ceiling 2048.
-    let max_tokens = (protected_text.len() * 2).clamp(256, 2048) as u64;
-
-    let body = serde_json::json!({
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": build_system_prompt(style)
-            },
-            {
-                "role": "user",
-                "content": format!("[Raw transcription to clean up]\n{protected_text}")
-            }
-        ],
-        "temperature": 0.1,
-        "max_tokens": max_tokens,
-        "frequency_penalty": 1.5,
-    });
-
-    let response = client
-        .post("https://api.groq.com/openai/v1/chat/completions")
-        .header("Authorization", format!("Bearer {api_key}"))
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .send()
-        .await?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body_text = response.text().await.unwrap_or_default();
-        return Err(LlmError::Api(format!("{status}: {body_text}")));
-    }
-
-    let chat: ChatResponse = response.json().await?;
-    let content = chat
-        .choices
-        .into_iter()
-        .next()
-        .ok_or(LlmError::Format)?
-        .message
-        .content;
-
-    // Strip common LLM prefixes that ignore the "output only" instruction
-    let cleaned = content.trim();
-    let cleaned = strip_llm_prefix(cleaned);
-
-    // Restore protected English words
-    let result = if placeholders.is_empty() {
-        cleaned.to_string()
-    } else {
-        restore_english(cleaned, &placeholders)
-    };
-
-    Ok(result)
-}
-
 /// Remove common preamble/prefix patterns that LLMs add despite instructions.
 fn strip_llm_prefix(text: &str) -> &str {
     let prefixes = [
@@ -227,6 +158,172 @@ fn strip_llm_prefix(text: &str) -> &str {
         }
     }
     result
+}
+
+// --- TextEnhancer trait ---
+
+/// Trait for LLM post-processing providers.
+/// All methods are sync — implementations that need async should use `tokio::runtime::Runtime`.
+pub(crate) trait TextEnhancer: Send + Sync {
+    fn name(&self) -> &str;
+    fn is_local(&self) -> bool;
+    fn enhance(&self, text: &str, style: &str) -> Result<String, LlmError>;
+}
+
+/// OpenAI-compatible LLM provider. Covers Groq, Ollama, and any custom endpoint.
+pub(crate) struct OpenAICompatibleEnhancer {
+    pub api_url: String,
+    api_key: String,
+    model: String,
+    local: bool,
+    provider_name: String,
+}
+
+impl OpenAICompatibleEnhancer {
+    pub fn groq(api_key: &str, model: &str) -> Self {
+        Self {
+            api_url: "https://api.groq.com/openai/v1/chat/completions".to_string(),
+            api_key: api_key.to_string(),
+            model: model.to_string(),
+            local: false,
+            provider_name: "Groq".to_string(),
+        }
+    }
+
+    pub fn ollama(base_url: &str, model: &str) -> Self {
+        let url = base_url.trim_end_matches('/');
+        Self {
+            api_url: format!("{url}/v1/chat/completions"),
+            api_key: String::new(),
+            model: model.to_string(),
+            local: true,
+            provider_name: "Ollama".to_string(),
+        }
+    }
+
+    pub fn custom(api_url: &str, api_key: &str, model: &str) -> Self {
+        Self {
+            api_url: api_url.to_string(),
+            api_key: api_key.to_string(),
+            model: model.to_string(),
+            local: false,
+            provider_name: "Custom".to_string(),
+        }
+    }
+}
+
+impl TextEnhancer for OpenAICompatibleEnhancer {
+    fn name(&self) -> &str {
+        &self.provider_name
+    }
+
+    fn is_local(&self) -> bool {
+        self.local
+    }
+
+    fn enhance(&self, text: &str, style: &str) -> Result<String, LlmError> {
+        let (protected_text, placeholders) = protect_english(text);
+
+        let max_tokens = (protected_text.len() * 2).clamp(256, 2048) as u64;
+
+        let mut body = serde_json::json!({
+            "model": &self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": build_system_prompt(style)
+                },
+                {
+                    "role": "user",
+                    "content": format!("[Raw transcription to clean up]\n{protected_text}")
+                }
+            ],
+            "temperature": 0.1,
+            "max_tokens": max_tokens,
+        });
+
+        // Only add frequency_penalty for non-Ollama providers (Ollama may not support it)
+        if !self.local {
+            body["frequency_penalty"] = serde_json::json!(1.5);
+        }
+
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e| LlmError::Api(format!("failed to create runtime: {e}")))?;
+
+        let response = rt.block_on(async {
+            let client = reqwest::Client::new();
+            let mut req = client
+                .post(&self.api_url)
+                .header("Content-Type", "application/json")
+                .json(&body);
+
+            if !self.api_key.is_empty() {
+                req = req.header("Authorization", format!("Bearer {}", self.api_key));
+            }
+
+            req.send().await
+        })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body_text = rt.block_on(response.text()).unwrap_or_default();
+            return Err(LlmError::Api(format!("{status}: {body_text}")));
+        }
+
+        let chat: ChatResponse = rt.block_on(response.json())?;
+        let content = chat
+            .choices
+            .into_iter()
+            .next()
+            .ok_or(LlmError::Format)?
+            .message
+            .content;
+
+        let cleaned = strip_llm_prefix(content.trim());
+
+        let result = if placeholders.is_empty() {
+            cleaned.to_string()
+        } else {
+            restore_english(cleaned, &placeholders)
+        };
+
+        Ok(result)
+    }
+}
+
+/// Creates the appropriate TextEnhancer based on current settings.
+/// Returns None if LLM is disabled or required config is missing.
+pub(crate) fn create_enhancer(settings: &crate::settings::Settings) -> Option<Box<dyn TextEnhancer>> {
+    if !settings.llm_enabled {
+        return None;
+    }
+
+    match settings.llm_provider.as_str() {
+        "groq" => {
+            if settings.groq_api_key.is_empty() {
+                return None;
+            }
+            Some(Box::new(OpenAICompatibleEnhancer::groq(
+                &settings.groq_api_key,
+                &settings.llm_model,
+            )))
+        }
+        "ollama" => Some(Box::new(OpenAICompatibleEnhancer::ollama(
+            &settings.ollama_url,
+            &settings.ollama_model,
+        ))),
+        "custom" => {
+            if settings.custom_llm_url.is_empty() {
+                return None;
+            }
+            Some(Box::new(OpenAICompatibleEnhancer::custom(
+                &settings.custom_llm_url,
+                &settings.custom_llm_key,
+                &settings.custom_llm_model,
+            )))
+        }
+        _ => None,
+    }
 }
 
 // --- Groq Whisper API transcription ---
@@ -302,4 +399,87 @@ pub(crate) async fn transcribe_groq(
 
     let result: TranscriptionResponse = response.json().await?;
     Ok(result.text.trim().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::Settings;
+
+    #[test]
+    fn test_create_enhancer_disabled() {
+        let s = Settings::default();
+        assert!(create_enhancer(&s).is_none());
+    }
+
+    #[test]
+    fn test_create_enhancer_groq() {
+        let s = Settings {
+            llm_enabled: true,
+            groq_api_key: "gsk_test".to_string(),
+            llm_provider: "groq".to_string(),
+            ..Default::default()
+        };
+        let enhancer = create_enhancer(&s);
+        assert!(enhancer.is_some());
+        assert_eq!(enhancer.unwrap().name(), "Groq");
+    }
+
+    #[test]
+    fn test_create_enhancer_ollama() {
+        let s = Settings {
+            llm_enabled: true,
+            llm_provider: "ollama".to_string(),
+            ..Default::default()
+        };
+        let enhancer = create_enhancer(&s);
+        assert!(enhancer.is_some());
+        let e = enhancer.unwrap();
+        assert_eq!(e.name(), "Ollama");
+        assert!(e.is_local());
+    }
+
+    #[test]
+    fn test_create_enhancer_groq_no_key() {
+        let s = Settings {
+            llm_enabled: true,
+            llm_provider: "groq".to_string(),
+            groq_api_key: String::new(),
+            ..Default::default()
+        };
+        assert!(create_enhancer(&s).is_none());
+    }
+
+    #[test]
+    fn test_enhancer_is_send_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<OpenAICompatibleEnhancer>();
+    }
+
+    #[test]
+    fn test_groq_preset() {
+        let enhancer = OpenAICompatibleEnhancer::groq("test-key", "llama-3.3-70b-versatile");
+        assert_eq!(enhancer.name(), "Groq");
+        assert!(!enhancer.is_local());
+        assert_eq!(enhancer.api_url, "https://api.groq.com/openai/v1/chat/completions");
+    }
+
+    #[test]
+    fn test_ollama_preset() {
+        let enhancer = OpenAICompatibleEnhancer::ollama("http://localhost:11434", "llama3.2");
+        assert_eq!(enhancer.name(), "Ollama");
+        assert!(enhancer.is_local());
+        assert_eq!(enhancer.api_url, "http://localhost:11434/v1/chat/completions");
+    }
+
+    #[test]
+    fn test_custom_preset() {
+        let enhancer = OpenAICompatibleEnhancer::custom(
+            "https://my-server.com/v1/chat/completions",
+            "sk-123",
+            "my-model",
+        );
+        assert_eq!(enhancer.name(), "Custom");
+        assert!(!enhancer.is_local());
+    }
 }

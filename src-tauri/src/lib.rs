@@ -344,45 +344,64 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         }
     };
 
-    // LLM post-processing (if enabled and API key present)
-    let (llm_enabled, api_key, llm_model, app_aware_style) = state
-        .settings
-        .lock()
-        .map(|s| (
-            s.llm_enabled,
-            s.groq_api_key.clone(),
-            s.llm_model.clone(),
-            s.app_aware_style,
-        ))
-        .unwrap_or_else(|_| (false, String::new(), String::new(), false));
+    let _ = app.emit(
+        "transcription_engine_info",
+        serde_json::json!({
+            "engine": &engine_type,
+            "local": engine_type != "groq",
+        }),
+    );
+
+    // LLM post-processing via TextEnhancer trait
+    let (enhancer, app_aware_style) = {
+        let s = state
+            .settings
+            .lock()
+            .map_err(|e| format!("settings mutex poisoned: {e}"))?;
+        (llm::create_enhancer(&s), s.app_aware_style)
+    };
 
     eprintln!("[whisper raw] {}", raw_text);
 
-    let text = if llm_enabled && !api_key.is_empty() && !raw_text.is_empty() {
-        let _ = state
-            .app_state
-            .transition(state::RecordingState::Processing);
-        let _ = app.emit("recording_state_changed", "processing");
-
-        let style = if app_aware_style {
-            frontapp::foreground_app_bundle_id()
-                .as_deref()
-                .map(frontapp::style_for_app)
-                .unwrap_or("default")
+    let text = if let Some(enhancer) = enhancer {
+        if raw_text.is_empty() {
+            raw_text
         } else {
-            "default"
-        };
+            let _ = state
+                .app_state
+                .transition(state::RecordingState::Processing);
+            let _ = app.emit("recording_state_changed", "processing");
 
-        let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
-        match rt.block_on(llm::process_text(&api_key, &llm_model, &raw_text, style)) {
-            Ok(processed) => {
-                eprintln!("[llm output] {}", processed);
-                processed
-            }
-            Err(e) => {
-                log::error!("LLM post-processing failed: {}", e);
-                let _ = app.emit("recording_error", format!("LLM processing failed, using raw text: {e}"));
-                raw_text
+            let _ = app.emit(
+                "enhancer_info",
+                serde_json::json!({
+                    "name": enhancer.name(),
+                    "local": enhancer.is_local(),
+                }),
+            );
+
+            let style = if app_aware_style {
+                frontapp::foreground_app_bundle_id()
+                    .as_deref()
+                    .map(frontapp::style_for_app)
+                    .unwrap_or("default")
+            } else {
+                "default"
+            };
+
+            match enhancer.enhance(&raw_text, style) {
+                Ok(processed) => {
+                    eprintln!("[llm output] {}", processed);
+                    processed
+                }
+                Err(e) => {
+                    log::error!("LLM post-processing failed: {}", e);
+                    let _ = app.emit(
+                        "recording_error",
+                        format!("LLM processing failed, using raw text: {e}"),
+                    );
+                    raw_text
+                }
             }
         }
     } else {

@@ -13,6 +13,18 @@ fn default_true() -> bool {
     true
 }
 
+fn default_groq() -> String {
+    "groq".to_string()
+}
+
+fn default_ollama_url() -> String {
+    "http://localhost:11434".to_string()
+}
+
+fn default_ollama_model() -> String {
+    "llama3.2".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Settings {
     pub ptt_key: String,
@@ -32,6 +44,18 @@ pub(crate) struct Settings {
     pub llm_enabled: bool,
     #[serde(default = "default_llm_model")]
     pub llm_model: String,
+    #[serde(default = "default_groq")]
+    pub llm_provider: String,
+    #[serde(default = "default_ollama_url")]
+    pub ollama_url: String,
+    #[serde(default = "default_ollama_model")]
+    pub ollama_model: String,
+    #[serde(default)]
+    pub custom_llm_url: String,
+    #[serde(default)]
+    pub custom_llm_key: String,
+    #[serde(default)]
+    pub custom_llm_model: String,
     #[serde(default = "default_true")]
     pub app_aware_style: bool,
 }
@@ -51,6 +75,12 @@ impl Default for Settings {
             dictionary: String::new(),
             llm_enabled: false,
             llm_model: default_llm_model(),
+            llm_provider: default_groq(),
+            ollama_url: default_ollama_url(),
+            ollama_model: default_ollama_model(),
+            custom_llm_url: String::new(),
+            custom_llm_key: String::new(),
+            custom_llm_model: String::new(),
             app_aware_style: true,
         }
     }
@@ -147,4 +177,53 @@ pub(crate) fn save_settings(settings: &Settings, base: &Path) -> Result<(), Stri
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deserialize_legacy_settings() {
+        let json = r#"{
+            "ptt_key": "AltLeft",
+            "language": "auto",
+            "engine": "local",
+            "model": "large-v3-turbo",
+            "groq_api_key": "gsk_test",
+            "window_opacity": 0.78,
+            "auto_start": false,
+            "llm_enabled": true,
+            "llm_model": "llama-3.3-70b-versatile"
+        }"#;
+
+        let s: Settings = serde_json::from_str(json).unwrap();
+        assert_eq!(s.llm_provider, "groq");
+        assert_eq!(s.ollama_url, "http://localhost:11434");
+        assert_eq!(s.ollama_model, "llama3.2");
+        assert!(s.custom_llm_url.is_empty());
+    }
+
+    #[test]
+    fn test_deserialize_new_settings() {
+        let json = r#"{
+            "ptt_key": "AltLeft",
+            "language": "auto",
+            "engine": "local",
+            "model": "large-v3-turbo",
+            "groq_api_key": "",
+            "window_opacity": 0.78,
+            "auto_start": false,
+            "llm_enabled": true,
+            "llm_model": "llama-3.3-70b-versatile",
+            "llm_provider": "ollama",
+            "ollama_url": "http://192.168.1.100:11434",
+            "ollama_model": "mistral"
+        }"#;
+
+        let s: Settings = serde_json::from_str(json).unwrap();
+        assert_eq!(s.llm_provider, "ollama");
+        assert_eq!(s.ollama_url, "http://192.168.1.100:11434");
+        assert_eq!(s.ollama_model, "mistral");
+    }
 }

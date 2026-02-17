@@ -231,4 +231,13 @@ window.addEventListener("DOMContentLoaded", async () => {
       setAppBadge(name);
     }
   });
+
+  await listen("enhancer_info", (event) => {
+    const { name, local } = event.payload;
+    const el = appBadge();
+    if (el) {
+      el.textContent = local ? `${name} (Local)` : `${name} (Cloud)`;
+      el.className = "app-badge " + (local ? "badge-local" : "badge-cloud") + " visible";
+    }
+  });
 });

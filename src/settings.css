@@ -554,6 +554,13 @@ input[type="range"]::-webkit-slider-thumb:hover {
   box-shadow: var(--shadow-btn);
 }
 
+/* -- Groq hint -- */
+.row-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
 /* ── Save Status ── */
 
 .save-status {
