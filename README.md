@@ -28,7 +28,9 @@ Murmur is a voice dictation tool that transcribes your speech and inserts polish
 - **Toggle Mode** -- Press once to start recording, press again to stop (with 5-min auto-stop and debounce protection)
 - **Custom Hotkey** -- Choose any modifier key (Option, Command, Shift, Control, left or right)
 - **Dual Engine** -- Local Whisper (Metal GPU) or Groq cloud API
-- **LLM Post-Processing** -- Clean up filler words, add punctuation, Simplified-to-Traditional Chinese conversion via Groq LLM
+- **Multi-Provider LLM** -- Groq (cloud), Ollama (local), or any OpenAI-compatible endpoint for text enhancement
+- **Fully Offline Mode** -- Local Whisper + Ollama for complete privacy (no data leaves your machine)
+- **LLM Post-Processing** -- Clean up filler words, add punctuation, Simplified-to-Traditional Chinese conversion
 - **Smart Clipboard** -- Auto-pastes when a text field is focused; copies to clipboard only when no text input is detected (e.g. on Desktop)
 - **App-Aware Style** -- Automatically adjusts output tone based on the active app (e.g. formal in Slack, technical in VS Code)
 - **Personal Dictionary** -- Add custom terms to improve transcription accuracy, with undo support for deletions
@@ -88,7 +90,13 @@ To switch engines: **Settings > Transcription > Engine**
 
 ### 4. LLM Post-Processing (Recommended)
 
-Requires a **Groq API key** (same key used for both Whisper and LLM).
+Choose a provider for AI text enhancement:
+
+| Provider | Speed | Privacy | Setup |
+|----------|-------|---------|-------|
+| **Groq** | Fast | Cloud | Free API key from [console.groq.com](https://console.groq.com) |
+| **Ollama** | Varies | Local | Install [Ollama](https://ollama.com), pull a model |
+| **Custom** | Varies | Varies | Any OpenAI-compatible endpoint |
 
 What it does:
 - Removes filler words (um, uh, etc.)
@@ -138,7 +146,7 @@ For the best experience with Chinese dictation:
 | App Framework | Tauri 2 | Lightweight desktop app |
 | Audio Capture | cpal | Microphone input -> 16kHz mono |
 | Speech-to-Text | whisper-rs / Groq API | Local or cloud transcription |
-| LLM Processing | Groq API (Llama 3.3) | Text cleanup and formatting |
+| LLM Processing | Groq / Ollama / Custom | Text cleanup and formatting |
 | Hotkey Detection | CGEventTap / SetWindowsHookEx | Global modifier key listener (per-platform) |
 | Text Insertion | arboard + rdev | Clipboard write + Cmd+V / Ctrl+V simulation |
 | App Detection | NSWorkspace / Win32 API | Foreground app detection (per-platform) |
@@ -155,7 +163,7 @@ For the best experience with Chinese dictation:
 - Microphone permission
 
 ### Both Platforms
-- Groq API key (free, for cloud engine and LLM features)
+- Groq API key (free, for cloud engine and Groq LLM) or Ollama (for local LLM)
 
 ## FAQ
 

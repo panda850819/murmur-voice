@@ -28,7 +28,9 @@ Murmur 是一款語音聽寫工具，能將你的語音轉錄並將整理好的�
 - **切換模式** -- 按一次開始錄音，再按一次停止（5 分鐘自動停止，含防誤觸保護）
 - **自訂快捷鍵** -- 可選擇任何修飾鍵（Option、Command、Shift、Control，左右皆可）
 - **雙引擎** -- 本機 Whisper（Metal GPU）或 Groq 雲端 API
-- **LLM 後處理** -- 透過 Groq LLM 移除贅詞、加入標點、簡繁轉換
+- **多供應商 LLM** -- Groq（雲端）、Ollama（本機）或任何 OpenAI 相容端點進行文字增強
+- **完全離線模式** -- 本機 Whisper + Ollama，資料完全不離開你的電腦
+- **LLM 後處理** -- 移除贅詞、加入標點、簡繁轉換
 - **智慧剪貼簿** -- 偵測到文字輸入欄位時自動貼上；在桌面等無輸入欄位時僅複製到剪貼簿
 - **應用感知風格** -- 根據前景應用程式自動調整輸出語氣（如 Slack 用口語、VS Code 用技術風格）
 - **個人詞典** -- 加入常用詞彙提升轉錄準確度，支援刪除復原
@@ -88,7 +90,13 @@ pnpm tauri dev
 
 ### 4. LLM 後處理（建議啟用）
 
-需要 **Groq API key**（Whisper 與 LLM 共用同一組 key）。
+選擇 AI 文字增強供應商：
+
+| 供應商 | 速度 | 隱私 | 設定 |
+|--------|------|------|------|
+| **Groq** | 快 | 雲端 | 從 [console.groq.com](https://console.groq.com) 取得免費 API key |
+| **Ollama** | 依模型 | 本機 | 安裝 [Ollama](https://ollama.com)，拉取模型 |
+| **Custom** | 依端點 | 依端點 | 任何 OpenAI 相容端點 |
 
 功能包括：
 - 移除贅詞（嗯、啊、那個、就是、um、uh...）
@@ -138,7 +146,7 @@ pnpm tauri dev
 | 應用框架 | Tauri 2 | 輕量桌面應用 |
 | 音訊擷取 | cpal | 麥克風輸入 -> 16kHz 單聲道 |
 | 語音轉文字 | whisper-rs / Groq API | 本機或雲端轉錄 |
-| LLM 處理 | Groq API (Llama 3.3) | 文字整理與格式化 |
+| LLM 處理 | Groq / Ollama / Custom | 文字整理與格式化 |
 | 快捷鍵偵測 | CGEventTap / SetWindowsHookEx | 全域修飾鍵監聽（依平台） |
 | 文字插入 | arboard + rdev | 剪貼簿寫入 + Cmd+V / Ctrl+V 模擬 |
 | 應用偵測 | NSWorkspace / Win32 API | 前景應用偵測（依平台） |
@@ -155,7 +163,7 @@ pnpm tauri dev
 - 麥克風權限
 
 ### 兩個平台皆需
-- Groq API key（免費，用於雲端引擎與 LLM 功能）
+- Groq API key（免費，用於雲端引擎與 Groq LLM）或 Ollama（用於本機 LLM）
 
 ## 常見問題
 

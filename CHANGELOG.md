@@ -4,6 +4,20 @@ All notable changes to Murmur Voice are documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-02-17
+
+### Added
+- Multi-provider LLM support — Groq, Ollama (local), and Custom OpenAI-compatible endpoints
+- `TextEnhancer` trait with `OpenAICompatibleEnhancer` struct for pluggable LLM providers
+- Provider dropdown in Settings with conditional config sections (API key, URL, model per provider)
+- Data flow indicator badges in preview window (Local/Cloud)
+- Fully offline AI enhancement via Ollama (local transcription + local LLM)
+
+### Changed
+- LLM post-processing refactored from hardcoded Groq call to trait-based dispatch
+- Groq API key input moved to AI Processing section; Transcription section shows hint text
+- Settings schema extended with 6 new fields (`llm_provider`, `ollama_url`, `ollama_model`, `custom_llm_url`, `custom_llm_key`, `custom_llm_model`) — backward compatible via serde defaults
+
 ## [0.2.1] - 2026-02-15
 
 ### Added
