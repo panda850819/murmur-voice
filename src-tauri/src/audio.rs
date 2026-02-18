@@ -177,10 +177,8 @@ impl AudioRecorder {
                                 if let Ok(mut s) = samples_clone.lock() {
                                     s.extend_from_slice(&output_buffer);
                                 }
-                            } else {
-                                if let Ok(mut s) = samples_clone.lock() {
-                                    s.extend_from_slice(&intermediate);
-                                }
+                            } else if let Ok(mut s) = samples_clone.lock() {
+                                s.extend_from_slice(&intermediate);
                             }
                         },
                         |err| {
