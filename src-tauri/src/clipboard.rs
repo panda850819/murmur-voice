@@ -37,7 +37,7 @@ pub(crate) fn insert_text(text: &str) -> Result<(), ClipboardError> {
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     // Simulate Cmd+V
-    simulate_paste()?;
+    let paste_result = simulate_paste();
 
     // Wait for paste to complete
     std::thread::sleep(std::time::Duration::from_millis(100));
@@ -47,7 +47,7 @@ pub(crate) fn insert_text(text: &str) -> Result<(), ClipboardError> {
         let _ = clipboard.set_text(original_text);
     }
 
-    Ok(())
+    paste_result
 }
 
 /// Copies text to the system clipboard without simulating paste or restoring previous content.
