@@ -99,25 +99,49 @@ impl AudioRecorder {
 
             let stream = match sample_format {
                 cpal::SampleFormat::F32 => {
+                    // Reusable buffers to avoid allocation in hot path
+                    let mut intermediate = Vec::with_capacity(4096);
+                    let mut output_buffer = Vec::with_capacity(4096);
+
                     device.build_input_stream(
                         &config,
                         move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                            let mono: Vec<f32> = if channels > 1 {
-                                data.chunks(channels as usize)
-                                    .map(|frame| frame.iter().sum::<f32>() / channels as f32)
-                                    .collect()
+                            // Optimization: Direct copy if 1 channel and no resample
+                            if channels == 1 && !needs_resample {
+                                if let Ok(mut s) = samples_clone.lock() {
+                                    s.extend_from_slice(data);
+                                }
+                                return;
+                            }
+
+                            intermediate.clear();
+                            output_buffer.clear();
+
+                            // 1. Prepare source (convert to Mono F32 if needed)
+                            let source = if channels > 1 {
+                                // Downmix to mono
+                                for frame in data.chunks(channels as usize) {
+                                    let sum: f32 = frame.iter().sum();
+                                    intermediate.push(sum / channels as f32);
+                                }
+                                &intermediate
                             } else {
-                                data.to_vec()
+                                // Already mono F32
+                                data
                             };
 
-                            let processed = if needs_resample {
-                                resample_linear(&mono, rate_ratio)
+                            // 2. Resample or pass through
+                            if needs_resample {
+                                resample_linear_into(source, rate_ratio, &mut output_buffer);
+                                if let Ok(mut s) = samples_clone.lock() {
+                                    s.extend_from_slice(&output_buffer);
+                                }
                             } else {
-                                mono
-                            };
-
-                            if let Ok(mut s) = samples_clone.lock() {
-                                s.extend_from_slice(&processed);
+                                // If we are here, channels > 1 but !needs_resample (so source is intermediate)
+                                // or channels == 1 (handled by early return above).
+                                if let Ok(mut s) = samples_clone.lock() {
+                                    s.extend_from_slice(source);
+                                }
                             }
                         },
                         |err| {
@@ -127,29 +151,34 @@ impl AudioRecorder {
                     )
                 }
                 cpal::SampleFormat::I16 => {
+                    // Reusable buffers
+                    let mut intermediate = Vec::with_capacity(4096);
+                    let mut output_buffer = Vec::with_capacity(4096);
+
                     device.build_input_stream(
                         &config,
                         move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                            let float_data: Vec<f32> =
-                                data.iter().map(|&s| s as f32 / i16::MAX as f32).collect();
+                            intermediate.clear();
+                            output_buffer.clear();
 
-                            let mono: Vec<f32> = if channels > 1 {
-                                float_data
-                                    .chunks(channels as usize)
-                                    .map(|frame| frame.iter().sum::<f32>() / channels as f32)
-                                    .collect()
+                            // 1. Convert to Mono F32
+                            if channels > 1 {
+                                for frame in data.chunks(channels as usize) {
+                                    let sum: f32 = frame.iter().map(|&s| s as f32 / i16::MAX as f32).sum();
+                                    intermediate.push(sum / channels as f32);
+                                }
                             } else {
-                                float_data
-                            };
+                                intermediate.extend(data.iter().map(|&s| s as f32 / i16::MAX as f32));
+                            }
 
-                            let processed = if needs_resample {
-                                resample_linear(&mono, rate_ratio)
-                            } else {
-                                mono
-                            };
-
-                            if let Ok(mut s) = samples_clone.lock() {
-                                s.extend_from_slice(&processed);
+                            // 2. Resample or pass through
+                            if needs_resample {
+                                resample_linear_into(&intermediate, rate_ratio, &mut output_buffer);
+                                if let Ok(mut s) = samples_clone.lock() {
+                                    s.extend_from_slice(&output_buffer);
+                                }
+                            } else if let Ok(mut s) = samples_clone.lock() {
+                                s.extend_from_slice(&intermediate);
                             }
                         },
                         |err| {
@@ -214,13 +243,13 @@ impl AudioRecorder {
     }
 }
 
-fn resample_linear(input: &[f32], ratio: f64) -> Vec<f32> {
+fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
     if input.is_empty() {
-        return Vec::new();
+        return;
     }
 
     let output_len = (input.len() as f64 * ratio).ceil() as usize;
-    let mut output = Vec::with_capacity(output_len);
+    output.reserve(output_len);
 
     for i in 0..output_len {
         let src_pos = i as f64 / ratio;
@@ -237,6 +266,61 @@ fn resample_linear(input: &[f32], ratio: f64) -> Vec<f32> {
 
         output.push(sample);
     }
+}
 
-    output
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resample_linear_into_identity() {
+        let input = vec![0.0, 0.5, 1.0];
+        let mut output = Vec::new();
+        resample_linear_into(&input, 1.0, &mut output);
+
+        assert_eq!(output.len(), 3);
+        assert!((output[0] - 0.0).abs() < 1e-6);
+        assert!((output[1] - 0.5).abs() < 1e-6);
+        assert!((output[2] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_resample_linear_into_upsample() {
+        let input = vec![0.0, 1.0];
+        // Ratio 2.0 -> output len 4
+        let mut output = Vec::new();
+        resample_linear_into(&input, 2.0, &mut output);
+
+        assert_eq!(output.len(), 4);
+        assert!((output[0] - 0.0).abs() < 1e-6); // idx 0
+        assert!((output[1] - 0.5).abs() < 1e-6); // idx 0.5
+        assert!((output[2] - 1.0).abs() < 1e-6); // idx 1.0
+        // idx 1.5 -> src_idx 1. (idx+1 out of bounds). input[1] = 1.0.
+        // 1.0 * (1-0.5) + (out_of_bounds? no, logic says if src_idx < len returns input[src_idx])
+        // wait, logic says:
+        // if src_idx + 1 < input.len() { lerp }
+        // else if src_idx < input.len() { input[src_idx] }
+        // else { 0.0 }
+
+        // i=3. src_pos = 1.5. src_idx=1. frac=0.5.
+        // src_idx+1 = 2. input len is 2. 2 < 2 is false.
+        // src_idx < input.len() -> 1 < 2 is true.
+        // returns input[1] which is 1.0.
+        assert!((output[3] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_resample_linear_into_downsample() {
+        let input = vec![0.0, 0.5, 1.0, 0.5];
+        // Ratio 0.5 -> output len 2
+        let mut output = Vec::new();
+        resample_linear_into(&input, 0.5, &mut output);
+
+        assert_eq!(output.len(), 2);
+        // i=0. pos=0. input[0]=0.0
+        assert!((output[0] - 0.0).abs() < 1e-6);
+
+        // i=1. pos=2. input[2]=1.0
+        assert!((output[1] - 1.0).abs() < 1e-6);
+    }
 }
