@@ -16,6 +16,29 @@ All notable changes to Murmur Voice are documented in this file.
 ### Fixed
 - Update badge layout shift — added min-width and centered text
 
+## [0.3.1] - 2026-02-19
+
+### Added
+- **Combo hotkey support** — bind PTT to modifier + regular key (e.g. Option+Z, Control+Space) in addition to single modifier keys
+- Two-phase key recording UI: hold modifier, then press a key (or release for modifier-only)
+- Multiple dictionary suggestion chips shown simultaneously in preview window
+- Real-time dictionary word detection while editing (500ms debounce via `input` event)
+- CJK word tokenization via `Intl.Segmenter` for accurate Chinese text diffing
+- "Add All" button for batch dictionary additions (2+ chips)
+- `pause_hotkey_listener` / `resume_hotkey_listener` Tauri commands for recording isolation
+
+### Changed
+- Hotkey system refactored: `HOTKEY_MASK` replaced with dual atomics (`MODIFIER_MASK` + `REGULAR_KEY`)
+- `ptt_key_mask()` replaced with `ptt_key_target()` returning `PttKeyTarget` struct
+- macOS CGEventTap expanded to filter `kCGEventKeyDown`/`kCGEventKeyUp` alongside `kCGEventFlagsChanged`
+- Dictionary suggestion bar redesigned from single-word prompt to multi-chip layout
+- `ptt_key` settings field extended to accept combo format (`"AltLeft+KeyZ"`) — backward compatible
+
+### Fixed
+- Fix clipboard data leak on paste failure (#4)
+- Reuse buffers in audio recorder callback (#3)
+- Restrict combo key picker to backend-mapped keys only (prevents silent degradation)
+
 ## [0.3.0] - 2026-02-17
 
 ### Added

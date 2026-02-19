@@ -26,14 +26,14 @@ Murmur is a voice dictation tool that transcribes your speech and inserts polish
 
 - **Push-to-Talk** -- Hold a modifier key to speak, release to insert text
 - **Toggle Mode** -- Press once to start recording, press again to stop (with 5-min auto-stop and debounce protection)
-- **Custom Hotkey** -- Choose any modifier key (Option, Command, Shift, Control, left or right)
+- **Custom Hotkey** -- Single modifier key or combo (e.g. Option+Z, Control+Space) with two-phase recording
 - **Dual Engine** -- Local Whisper (Metal GPU) or Groq cloud API
 - **Multi-Provider LLM** -- Groq (cloud), Ollama (local), or any OpenAI-compatible endpoint for text enhancement
 - **Fully Offline Mode** -- Local Whisper + Ollama for complete privacy (no data leaves your machine)
 - **LLM Post-Processing** -- Clean up filler words, add punctuation, Simplified-to-Traditional Chinese conversion
 - **Smart Clipboard** -- Auto-pastes when a text field is focused; copies to clipboard only when no text input is detected (e.g. on Desktop)
 - **App-Aware Style** -- Automatically adjusts output tone based on the active app (e.g. formal in Slack, technical in VS Code)
-- **Personal Dictionary** -- Add custom terms to improve transcription accuracy, with undo support for deletions
+- **Personal Dictionary** -- Add custom terms to improve transcription accuracy; inline dictionary chips appear in real-time while editing
 - **Transcription Preview** -- Floating preview window with copy button, editable text, character count, and detected app name
 - **Live Preview** -- See partial transcription while you speak (local engine only)
 - **Mixed-Language Support** -- English words in mixed CJK-English speech are preserved as-is (never translated)
@@ -147,7 +147,7 @@ For the best experience with Chinese dictation:
 | Audio Capture | cpal | Microphone input -> 16kHz mono |
 | Speech-to-Text | whisper-rs / Groq API | Local or cloud transcription |
 | LLM Processing | Groq / Ollama / Custom | Text cleanup and formatting |
-| Hotkey Detection | CGEventTap / SetWindowsHookEx | Global modifier key listener (per-platform) |
+| Hotkey Detection | CGEventTap / SetWindowsHookEx | Global hotkey listener (modifier or modifier+key combo) |
 | Text Insertion | arboard + rdev | Clipboard write + Cmd+V / Ctrl+V simulation |
 | App Detection | NSWorkspace / Win32 API | Foreground app detection (per-platform) |
 
