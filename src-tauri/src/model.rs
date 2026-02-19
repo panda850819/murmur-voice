@@ -2,6 +2,8 @@ use std::path::{Path, PathBuf};
 #[cfg(target_os = "windows")]
 use std::sync::Once;
 use thiserror::Error;
+use futures_util::StreamExt;
+use tokio::io::AsyncWriteExt;
 
 const MODEL_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin";
@@ -113,20 +115,12 @@ where
 
     let total_size = response.content_length().unwrap_or(EXPECTED_SIZE);
 
-    let mut file = std::fs::File::create(&path)?;
-    let mut downloaded: u64 = 0;
+    let mut file = tokio::fs::File::create(&path).await?;
+    let stream = response.bytes_stream();
 
-    use futures_util::StreamExt;
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| ModelError::Download(e.to_string()))?;
-        use std::io::Write;
-        file.write_all(&chunk)?;
-        downloaded += chunk.len() as u64;
-        progress_callback(downloaded, total_size);
-    }
+    copy_stream_with_progress(stream, &mut file, total_size, progress_callback).await?;
 
-    file.sync_all()?;
+    file.sync_all().await?;
 
     // Verify size
     let actual_size = std::fs::metadata(&path)?.len();
@@ -140,3 +134,72 @@ where
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures_util::stream;
+
+    #[tokio::test]
+    async fn test_throttling_logic() {
+        let chunk_size = 100_000; // 100KB
+        let num_chunks = 25; // 2.5MB total
+        let total_size = (chunk_size * num_chunks) as u64;
+        let data = vec![0u8; chunk_size];
+
+        // Create a stream of 25 chunks
+        let stream = stream::iter((0..num_chunks).map(|_| Ok::<_, std::io::Error>(data.clone())));
+
+        // Use a sink writer (discards data)
+        let writer = tokio::io::sink();
+
+        let callback_count = std::sync::atomic::AtomicUsize::new(0);
+        let callback = |_, _| {
+            callback_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        };
+
+        copy_stream_with_progress(stream, writer, total_size, callback)
+            .await
+            .expect("copy failed");
+
+        let count = callback_count.load(std::sync::atomic::Ordering::SeqCst);
+
+        // Expected behavior:
+        // 1. At 1.0MB (chunk 10) -> Call 1
+        // 2. At 2.0MB (chunk 20) -> Call 2
+        // 3. At 2.5MB (chunk 25/End) -> Call 3 (Total size reached)
+        assert_eq!(count, 3, "Callback should be called exactly 3 times (1MB, 2MB, End)");
+    }
+}
+
+async fn copy_stream_with_progress<S, W, F, E, B>(
+    mut stream: S,
+    mut writer: W,
+    total_size: u64,
+    progress_callback: F,
+) -> Result<(), ModelError>
+where
+    S: futures_util::Stream<Item = Result<B, E>> + Unpin,
+    B: AsRef<[u8]>,
+    W: tokio::io::AsyncWrite + Unpin,
+    F: Fn(u64, u64),
+    E: std::fmt::Display,
+{
+    let mut downloaded: u64 = 0;
+    let mut last_reported: u64 = 0;
+    // Throttle progress updates to every 1MB to avoid flooding the event loop
+    const REPORT_THRESHOLD: u64 = 1_000_000;
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| ModelError::Download(e.to_string()))?;
+        let data = chunk.as_ref();
+        writer.write_all(data).await?;
+        downloaded += data.len() as u64;
+
+        if downloaded == total_size || downloaded.saturating_sub(last_reported) >= REPORT_THRESHOLD {
+            progress_callback(downloaded, total_size);
+            last_reported = downloaded;
+        }
+    }
+
+    Ok(())
+}
