@@ -8,13 +8,15 @@ const appBadge = () => document.getElementById("app-badge");
 const previewBody = () => document.getElementById("preview-body");
 const copyBtn = () => document.getElementById("copy-btn");
 const dictSuggest = () => document.getElementById("dict-suggest");
-const dictSuggestText = () => document.getElementById("dict-suggest-text");
+const dictChips = () => document.getElementById("dict-chips");
 
 let autoHideTimer = null;
 let dotsInterval = null;
 let currentMode = null;
 let originalText = "";
-let pendingSuggestion = null;
+let addedWords = new Set();
+let dismissedWords = new Set();
+let debounceTimer = null;
 
 function setHeader(text, processing) {
   const el = headerText();
@@ -77,21 +79,88 @@ function disableEditing() {
   previewText().removeAttribute("contenteditable");
 }
 
-function wordDiff(original, edited) {
-  const origWords = original.split(/\s+/).filter(Boolean).map((w) => w.toLowerCase());
-  const editWords = edited.split(/\s+/).filter(Boolean);
-  return editWords.filter((w) => !origWords.includes(w.toLowerCase()));
+function tokenize(text) {
+  if (typeof Intl !== "undefined" && Intl.Segmenter) {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+    return [...segmenter.segment(text)]
+      .filter((s) => s.isWordLike)
+      .map((s) => s.segment);
+  }
+  return text.split(/\s+/).filter(Boolean);
 }
 
-function showDictSuggest(word) {
-  pendingSuggestion = word;
-  dictSuggestText().textContent = t("preview.dictPrompt").replace("{word}", word);
+function wordDiff(original, edited) {
+  const origSet = new Set(tokenize(original).map((w) => w.toLowerCase()));
+  const editWords = tokenize(edited);
+  return editWords.filter((w) => !origSet.has(w.toLowerCase()) && w.length >= 2);
+}
+
+function detectNewWords() {
+  const edited = previewText().textContent;
+  if (!originalText || originalText === edited) {
+    hideDictSuggest();
+    return;
+  }
+  const newWords = wordDiff(originalText, edited)
+    .filter((w) => !addedWords.has(w.toLowerCase()) && !dismissedWords.has(w.toLowerCase()));
+  if (newWords.length > 0) {
+    showDictSuggestions(newWords);
+  } else {
+    hideDictSuggest();
+  }
+}
+
+function showDictSuggestions(words) {
+  const container = dictChips();
+  while (container.firstChild) container.removeChild(container.firstChild);
+  words.forEach((word) => {
+    const chip = document.createElement("button");
+    chip.className = "dict-chip";
+    chip.textContent = "+ " + word;
+    chip.title = t("preview.add");
+    chip.addEventListener("click", () => addDictWord(word, chip));
+    container.appendChild(chip);
+  });
+  const addAllBtn = document.getElementById("dict-add-all-btn");
+  addAllBtn.style.display = words.length >= 2 ? "" : "none";
   dictSuggest().style.display = "";
+}
+
+async function addDictWord(word, chipEl) {
+  try {
+    await invoke("add_dictionary_term", { term: word });
+    addedWords.add(word.toLowerCase());
+    chipEl.textContent = t("preview.dictAdded");
+    chipEl.classList.add("added");
+    setTimeout(() => {
+      chipEl.remove();
+      updateDictBar();
+    }, 800);
+  } catch (e) {
+    console.error("add_dictionary_term failed:", e);
+    chipEl.textContent = "Error";
+    chipEl.classList.add("added");
+    setTimeout(() => {
+      chipEl.remove();
+      updateDictBar();
+    }, 1200);
+  }
+}
+
+function updateDictBar() {
+  const chips = dictChips().querySelectorAll(".dict-chip:not(.added)");
+  if (chips.length === 0) {
+    hideDictSuggest();
+    return;
+  }
+  const addAllBtn = document.getElementById("dict-add-all-btn");
+  addAllBtn.style.display = chips.length >= 2 ? "" : "none";
 }
 
 function hideDictSuggest() {
   dictSuggest().style.display = "none";
-  pendingSuggestion = null;
+  const container = dictChips();
+  while (container.firstChild) container.removeChild(container.firstChild);
 }
 
 function reset() {
@@ -109,6 +178,12 @@ function reset() {
   hideDictSuggest();
   currentMode = null;
   originalText = "";
+  addedWords.clear();
+  dismissedWords.clear();
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
 }
 
 function scrollToBottom() {
@@ -142,18 +217,23 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   // Dict suggestion handlers
-  document.getElementById("dict-add-btn").addEventListener("click", async () => {
-    if (!pendingSuggestion) return;
-    try {
-      await invoke("add_dictionary_term", { term: pendingSuggestion });
-      dictSuggestText().textContent = t("preview.dictAdded");
-      setTimeout(() => hideDictSuggest(), 1200);
-    } catch (_) {
-      hideDictSuggest();
+  document.getElementById("dict-add-all-btn").addEventListener("click", async () => {
+    const chips = dictChips().querySelectorAll(".dict-chip:not(.added)");
+    for (const chip of chips) {
+      const word = chip.textContent;
+      try {
+        await invoke("add_dictionary_term", { term: word });
+        addedWords.add(word.toLowerCase());
+        chip.textContent = t("preview.dictAdded");
+        chip.classList.add("added");
+      } catch (_) {}
     }
+    setTimeout(() => hideDictSuggest(), 800);
   });
 
   document.getElementById("dict-dismiss-btn").addEventListener("click", () => {
+    const chips = dictChips().querySelectorAll(".dict-chip:not(.added)");
+    chips.forEach((chip) => dismissedWords.add(chip.textContent.toLowerCase()));
     hideDictSuggest();
   });
 
@@ -162,14 +242,20 @@ window.addEventListener("DOMContentLoaded", async () => {
     clearAutoHide();
   });
 
-  // Detect edits on blur and suggest dictionary additions
+  // Detect new words in real-time while editing
+  previewText().addEventListener("input", () => {
+    setCharCount(previewText().textContent);
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(detectNewWords, 500);
+  });
+
+  // Final detection on blur + restart auto-hide
   previewText().addEventListener("blur", () => {
-    const edited = previewText().textContent;
-    if (!originalText || originalText === edited) return;
-    const newWords = wordDiff(originalText, edited);
-    if (newWords.length > 0) {
-      showDictSuggest(newWords[0]);
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
     }
+    detectNewWords();
 
     // Restart auto-hide after editing
     if (currentMode === "pasted") {

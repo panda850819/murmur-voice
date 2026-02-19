@@ -98,6 +98,7 @@ const I18N = {
     "preview.dictPrompt": "Add \"{word}\" to dictionary?",
     "preview.dictAdded": "Added!",
     "preview.add": "Add",
+    "preview.addAll": "Add All",
     "preview.dismiss": "Dismiss",
   },
   "zh-TW": {
@@ -196,6 +197,7 @@ const I18N = {
     "preview.dictPrompt": "加入「{word}」到辭典？",
     "preview.dictAdded": "已加入!",
     "preview.add": "加入",
+    "preview.addAll": "全部加入",
     "preview.dismiss": "忽略",
   },
 };
