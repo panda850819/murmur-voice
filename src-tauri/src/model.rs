@@ -134,6 +134,39 @@ where
     Ok(())
 }
 
+async fn copy_stream_with_progress<S, W, F, E, B>(
+    mut stream: S,
+    mut writer: W,
+    total_size: u64,
+    progress_callback: F,
+) -> Result<(), ModelError>
+where
+    S: futures_util::Stream<Item = Result<B, E>> + Unpin,
+    B: AsRef<[u8]>,
+    W: tokio::io::AsyncWrite + Unpin,
+    F: Fn(u64, u64),
+    E: std::fmt::Display,
+{
+    let mut downloaded: u64 = 0;
+    let mut last_reported: u64 = 0;
+    // Throttle progress updates to every 1MB to avoid flooding the event loop
+    const REPORT_THRESHOLD: u64 = 1_000_000;
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| ModelError::Download(e.to_string()))?;
+        let data = chunk.as_ref();
+        writer.write_all(data).await?;
+        downloaded += data.len() as u64;
+
+        if downloaded == total_size || downloaded.saturating_sub(last_reported) >= REPORT_THRESHOLD {
+            progress_callback(downloaded, total_size);
+            last_reported = downloaded;
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,37 +202,4 @@ mod tests {
         // 3. At 2.5MB (chunk 25/End) -> Call 3 (Total size reached)
         assert_eq!(count, 3, "Callback should be called exactly 3 times (1MB, 2MB, End)");
     }
-}
-
-async fn copy_stream_with_progress<S, W, F, E, B>(
-    mut stream: S,
-    mut writer: W,
-    total_size: u64,
-    progress_callback: F,
-) -> Result<(), ModelError>
-where
-    S: futures_util::Stream<Item = Result<B, E>> + Unpin,
-    B: AsRef<[u8]>,
-    W: tokio::io::AsyncWrite + Unpin,
-    F: Fn(u64, u64),
-    E: std::fmt::Display,
-{
-    let mut downloaded: u64 = 0;
-    let mut last_reported: u64 = 0;
-    // Throttle progress updates to every 1MB to avoid flooding the event loop
-    const REPORT_THRESHOLD: u64 = 1_000_000;
-
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| ModelError::Download(e.to_string()))?;
-        let data = chunk.as_ref();
-        writer.write_all(data).await?;
-        downloaded += data.len() as u64;
-
-        if downloaded == total_size || downloaded.saturating_sub(last_reported) >= REPORT_THRESHOLD {
-            progress_callback(downloaded, total_size);
-            last_reported = downloaded;
-        }
-    }
-
-    Ok(())
 }
