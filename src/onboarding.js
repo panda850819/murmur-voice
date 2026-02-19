@@ -12,9 +12,33 @@ const KEY_MAP = {
   "ControlRight": "Right Control",
 };
 
+const REGULAR_KEY_MAP = {
+  "KeyA": "A", "KeyB": "B", "KeyC": "C", "KeyD": "D", "KeyE": "E",
+  "KeyF": "F", "KeyG": "G", "KeyH": "H", "KeyI": "I", "KeyJ": "J",
+  "KeyK": "K", "KeyL": "L", "KeyM": "M", "KeyN": "N", "KeyO": "O",
+  "KeyP": "P", "KeyQ": "Q", "KeyR": "R", "KeyS": "S", "KeyT": "T",
+  "KeyU": "U", "KeyV": "V", "KeyW": "W", "KeyX": "X", "KeyY": "Y",
+  "KeyZ": "Z",
+  "Digit0": "0", "Digit1": "1", "Digit2": "2", "Digit3": "3", "Digit4": "4",
+  "Digit5": "5", "Digit6": "6", "Digit7": "7", "Digit8": "8", "Digit9": "9",
+  "Space": "Space", "Tab": "Tab", "Enter": "Enter",
+};
+
+function pttDisplayName(code) {
+  if (code && code.includes("+")) {
+    const [mod, key] = code.split("+");
+    const modName = KEY_MAP[mod] || mod;
+    const keyName = REGULAR_KEY_MAP[key] || key;
+    return modName + " + " + keyName;
+  }
+  return KEY_MAP[code] || code;
+}
+
 let currentStep = 1;
 let pttKey = "AltLeft";
 let isRecording = false;
+let recordingPhase = null; // null | "modifier" | "combo"
+let capturedModifier = null;
 let chosenLocale = "en";
 let chosenEngine = "local";
 
@@ -40,16 +64,20 @@ function updateDots() {
 
 function startPttRecording() {
   isRecording = true;
+  recordingPhase = "modifier";
+  capturedModifier = null;
   const btn = el("onboard-ptt-record");
-  btn.textContent = t("ptt.pressKey");
+  btn.textContent = t("ptt.holdModifier");
   btn.classList.add("recording");
 }
 
 function stopPttRecording() {
   isRecording = false;
+  recordingPhase = null;
+  capturedModifier = null;
   const btn = el("onboard-ptt-record");
   btn.classList.remove("recording");
-  btn.textContent = KEY_MAP[pttKey] || pttKey;
+  btn.textContent = pttDisplayName(pttKey);
 }
 
 function updateEngineNext() {
@@ -173,8 +201,24 @@ window.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    if (KEY_MAP[e.code]) {
-      pttKey = e.code;
+    if (recordingPhase === "modifier") {
+      if (KEY_MAP[e.code]) {
+        capturedModifier = e.code;
+        recordingPhase = "combo";
+        el("onboard-ptt-record").textContent = t("ptt.nowPressKey");
+      }
+    } else if (recordingPhase === "combo") {
+      if (REGULAR_KEY_MAP[e.code]) {
+        pttKey = capturedModifier + "+" + e.code;
+        stopPttRecording();
+      }
+    }
+  });
+
+  document.addEventListener("keyup", (e) => {
+    if (!isRecording || recordingPhase !== "combo") return;
+    if (e.code === capturedModifier) {
+      pttKey = capturedModifier;
       stopPttRecording();
     }
   });

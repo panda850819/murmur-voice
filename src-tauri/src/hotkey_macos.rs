@@ -1,5 +1,5 @@
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -8,20 +8,31 @@ pub(crate) enum HotkeyEvent {
     Released,
 }
 
-/// The active PTT key mask. Updated at runtime via settings.
+/// The active PTT modifier mask. Updated at runtime via settings.
 /// Default: Left Option (NX_DEVICELALTKEYMASK = 0x20)
-static HOTKEY_MASK: AtomicU64 = AtomicU64::new(0x20);
+static MODIFIER_MASK: AtomicU64 = AtomicU64::new(0x20);
 
-/// Update the PTT key mask at runtime.
-pub(crate) fn set_hotkey_mask(mask: u64) {
-    HOTKEY_MASK.store(mask, Ordering::SeqCst);
+/// The regular key CGKeyCode for combo mode (0 = modifier-only mode).
+static REGULAR_KEY: AtomicU32 = AtomicU32::new(0);
+
+/// Update the PTT hotkey target at runtime.
+pub(crate) fn set_hotkey_target(modifier: u64, regular_key: u32) {
+    MODIFIER_MASK.store(modifier, Ordering::SeqCst);
+    REGULAR_KEY.store(regular_key, Ordering::SeqCst);
 }
 
-// CGEvent constants
+// CGEvent type constants
+const K_CG_EVENT_KEY_DOWN: u32 = 10;
+const K_CG_EVENT_KEY_UP: u32 = 11;
 const K_CG_EVENT_FLAGS_CHANGED: u32 = 12;
+
+// CGEventTap creation constants
 const K_CG_HID_EVENT_TAP: u32 = 0;
 const K_CG_HEAD_INSERT_EVENT_TAP: u32 = 0;
-const K_CG_EVENT_TAP_OPTION_LISTEN_ONLY: u32 = 1;
+const K_CG_EVENT_TAP_OPTION_DEFAULT: u32 = 0;
+
+// CGEventField constant for keyboard keycode
+const K_CG_KEYBOARD_EVENT_KEYCODE: u32 = 9;
 
 // FFI types
 type CGEventRef = *mut c_void;
@@ -59,29 +70,76 @@ extern "C" {
     fn CFRunLoopAddSource(rl: CFRunLoopRef, source: CFRunLoopSourceRef, mode: CFStringRef);
     fn CFRunLoopRun();
     fn CGEventGetFlags(event: CGEventRef) -> u64;
+    fn CGEventGetIntegerValueField(event: CGEventRef, field: u32) -> i64;
 
     static kCFRunLoopDefaultMode: CFStringRef;
 }
 
+// Edge detection state for modifier-only mode
 static KEY_WAS_DOWN: AtomicBool = AtomicBool::new(false);
+
+// State for combo mode
+static MODIFIER_HELD: AtomicBool = AtomicBool::new(false);
+static COMBO_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 unsafe extern "C" fn event_tap_callback(
     _proxy: CGEventTapProxy,
-    _event_type: u32,
+    event_type: u32,
     event: CGEventRef,
     user_info: *mut c_void,
 ) -> CGEventRef {
     let sender = &*(user_info as *const mpsc::Sender<HotkeyEvent>);
-    let flags = CGEventGetFlags(event);
-    let mask = HOTKEY_MASK.load(Ordering::SeqCst);
+    let regular_key = REGULAR_KEY.load(Ordering::SeqCst);
 
-    let key_now = (flags & mask) != 0;
-    let was_down = KEY_WAS_DOWN.swap(key_now, Ordering::SeqCst);
+    if regular_key == 0 {
+        // Modifier-only mode — original edge detection logic (unchanged)
+        if event_type == K_CG_EVENT_FLAGS_CHANGED {
+            let flags = CGEventGetFlags(event);
+            let mask = MODIFIER_MASK.load(Ordering::SeqCst);
+            let key_now = (flags & mask) != 0;
+            let was_down = KEY_WAS_DOWN.swap(key_now, Ordering::SeqCst);
+            if key_now && !was_down {
+                let _ = sender.send(HotkeyEvent::Pressed);
+            } else if !key_now && was_down {
+                let _ = sender.send(HotkeyEvent::Released);
+            }
+        }
+        return event;
+    }
 
-    if key_now && !was_down {
-        let _ = sender.send(HotkeyEvent::Pressed);
-    } else if !key_now && was_down {
-        let _ = sender.send(HotkeyEvent::Released);
+    // Combo mode: modifier + regular key
+    match event_type {
+        K_CG_EVENT_FLAGS_CHANGED => {
+            let modifier = MODIFIER_MASK.load(Ordering::SeqCst);
+            let flags = CGEventGetFlags(event);
+            let mod_held = (flags & modifier) != 0;
+            MODIFIER_HELD.store(mod_held, Ordering::SeqCst);
+            // Modifier released while combo was active → emit Released
+            if !mod_held && COMBO_ACTIVE.swap(false, Ordering::SeqCst) {
+                let _ = sender.send(HotkeyEvent::Released);
+            }
+        }
+        K_CG_EVENT_KEY_DOWN => {
+            let keycode =
+                CGEventGetIntegerValueField(event, K_CG_KEYBOARD_EVENT_KEYCODE) as u32;
+            if keycode == regular_key
+                && MODIFIER_HELD.load(Ordering::SeqCst)
+                && !COMBO_ACTIVE.load(Ordering::SeqCst)
+            {
+                COMBO_ACTIVE.store(true, Ordering::SeqCst);
+                let _ = sender.send(HotkeyEvent::Pressed);
+                return std::ptr::null_mut(); // consume event
+            }
+        }
+        K_CG_EVENT_KEY_UP => {
+            let keycode =
+                CGEventGetIntegerValueField(event, K_CG_KEYBOARD_EVENT_KEYCODE) as u32;
+            if keycode == regular_key && COMBO_ACTIVE.swap(false, Ordering::SeqCst) {
+                let _ = sender.send(HotkeyEvent::Released);
+                return std::ptr::null_mut(); // consume event
+            }
+        }
+        _ => {}
     }
 
     event
@@ -91,7 +149,9 @@ pub(crate) fn start_listener(
     sender: mpsc::Sender<HotkeyEvent>,
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || unsafe {
-        let event_mask: u64 = 1 << K_CG_EVENT_FLAGS_CHANGED;
+        let event_mask: u64 = (1 << K_CG_EVENT_KEY_DOWN)
+            | (1 << K_CG_EVENT_KEY_UP)
+            | (1 << K_CG_EVENT_FLAGS_CHANGED);
 
         let sender_box = Box::new(sender);
         let sender_ptr = Box::into_raw(sender_box) as *mut c_void;
@@ -99,7 +159,7 @@ pub(crate) fn start_listener(
         let tap = CGEventTapCreate(
             K_CG_HID_EVENT_TAP,
             K_CG_HEAD_INSERT_EVENT_TAP,
-            K_CG_EVENT_TAP_OPTION_LISTEN_ONLY,
+            K_CG_EVENT_TAP_OPTION_DEFAULT,
             event_mask,
             event_tap_callback,
             sender_ptr,

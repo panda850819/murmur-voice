@@ -66,6 +66,13 @@ pub(crate) struct Settings {
     pub ui_locale: String,
 }
 
+/// Target for PTT key matching — supports single modifier or modifier+key combos.
+#[derive(Debug)]
+pub(crate) struct PttKeyTarget {
+    pub modifier_mask: u64,
+    pub regular_key: u32, // 0 = modifier-only
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -94,35 +101,21 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// Returns the platform-specific key mask for the configured PTT key.
-    #[cfg(target_os = "macos")]
-    pub fn ptt_key_mask(&self) -> u64 {
-        match self.ptt_key.as_str() {
-            "left_option" | "AltLeft" => 0x20,       // NX_DEVICELALTKEYMASK
-            "right_option" | "AltRight" => 0x40,     // NX_DEVICERALTKEYMASK
-            "left_command" | "MetaLeft" => 0x08,     // NX_DEVICELCMDKEYMASK
-            "right_command" | "MetaRight" => 0x10,   // NX_DEVICERCMDKEYMASK
-            "left_shift" | "ShiftLeft" => 0x02,      // NX_DEVICELSSHIFTKEYMASK
-            "right_shift" | "ShiftRight" => 0x04,    // NX_DEVICERSHIFTKEYMASK
-            "left_control" | "ControlLeft" => 0x01,  // NX_DEVICELCTLKEYMASK
-            "right_control" | "ControlRight" => 0x2000, // NX_DEVICERCTLKEYMASK
-            _ => 0x20,
-        }
-    }
-
-    /// Returns the platform-specific key mask for the configured PTT key.
-    #[cfg(target_os = "windows")]
-    pub fn ptt_key_mask(&self) -> u64 {
-        match self.ptt_key.as_str() {
-            "left_option" | "AltLeft" => 0xA4,        // VK_LMENU
-            "right_option" | "AltRight" => 0xA5,       // VK_RMENU
-            "left_command" | "MetaLeft" => 0x5B,       // VK_LWIN
-            "right_command" | "MetaRight" => 0x5C,     // VK_RWIN
-            "left_shift" | "ShiftLeft" => 0xA0,        // VK_LSHIFT
-            "right_shift" | "ShiftRight" => 0xA1,      // VK_RSHIFT
-            "left_control" | "ControlLeft" => 0xA2,    // VK_LCONTROL
-            "right_control" | "ControlRight" => 0xA3,  // VK_RCONTROL
-            _ => 0xA4, // default: left alt
+    /// Returns a PttKeyTarget for the configured PTT key.
+    /// Supports single modifier ("AltLeft") and combo ("AltLeft+KeyZ") formats.
+    pub fn ptt_key_target(&self) -> PttKeyTarget {
+        if let Some(plus_pos) = self.ptt_key.find('+') {
+            let modifier_str = &self.ptt_key[..plus_pos];
+            let key_str = &self.ptt_key[plus_pos + 1..];
+            PttKeyTarget {
+                modifier_mask: modifier_mask_for(modifier_str),
+                regular_key: keycode_for_code(key_str),
+            }
+        } else {
+            PttKeyTarget {
+                modifier_mask: modifier_mask_for(&self.ptt_key),
+                regular_key: 0,
+            }
         }
     }
 
@@ -161,6 +154,130 @@ impl Settings {
         }
 
         parts.join(" ")
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn modifier_mask_for(key: &str) -> u64 {
+    match key {
+        "left_option" | "AltLeft" => 0x20,
+        "right_option" | "AltRight" => 0x40,
+        "left_command" | "MetaLeft" => 0x08,
+        "right_command" | "MetaRight" => 0x10,
+        "left_shift" | "ShiftLeft" => 0x02,
+        "right_shift" | "ShiftRight" => 0x04,
+        "left_control" | "ControlLeft" => 0x01,
+        "right_control" | "ControlRight" => 0x2000,
+        _ => 0x20,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn modifier_mask_for(key: &str) -> u64 {
+    match key {
+        "left_option" | "AltLeft" => 0xA4,
+        "right_option" | "AltRight" => 0xA5,
+        "left_command" | "MetaLeft" => 0x5B,
+        "right_command" | "MetaRight" => 0x5C,
+        "left_shift" | "ShiftLeft" => 0xA0,
+        "right_shift" | "ShiftRight" => 0xA1,
+        "left_control" | "ControlLeft" => 0xA2,
+        "right_control" | "ControlRight" => 0xA3,
+        _ => 0xA4,
+    }
+}
+
+/// Maps JS `event.code` strings to macOS CGKeyCode values.
+#[cfg(target_os = "macos")]
+fn keycode_for_code(code: &str) -> u32 {
+    match code {
+        "KeyA" => 0x00,
+        "KeyS" => 0x01,
+        "KeyD" => 0x02,
+        "KeyF" => 0x03,
+        "KeyH" => 0x04,
+        "KeyG" => 0x05,
+        "KeyZ" => 0x06,
+        "KeyX" => 0x07,
+        "KeyC" => 0x08,
+        "KeyV" => 0x09,
+        "KeyB" => 0x0B,
+        "KeyQ" => 0x0C,
+        "KeyW" => 0x0D,
+        "KeyE" => 0x0E,
+        "KeyR" => 0x0F,
+        "KeyY" => 0x10,
+        "KeyT" => 0x11,
+        "Digit1" => 0x12,
+        "Digit2" => 0x13,
+        "Digit3" => 0x14,
+        "Digit4" => 0x15,
+        "Digit6" => 0x16,
+        "Digit5" => 0x17,
+        "Digit9" => 0x19,
+        "Digit7" => 0x1A,
+        "Digit8" => 0x1C,
+        "Digit0" => 0x1D,
+        "KeyO" => 0x1F,
+        "KeyU" => 0x20,
+        "KeyI" => 0x22,
+        "KeyP" => 0x23,
+        "Return" | "Enter" => 0x24,
+        "KeyL" => 0x25,
+        "KeyJ" => 0x26,
+        "KeyK" => 0x28,
+        "KeyN" => 0x2D,
+        "KeyM" => 0x2E,
+        "Tab" => 0x30,
+        "Space" => 0x31,
+        _ => 0,
+    }
+}
+
+/// Maps JS `event.code` strings to Windows Virtual Key codes.
+#[cfg(target_os = "windows")]
+fn keycode_for_code(code: &str) -> u32 {
+    match code {
+        "KeyA" => 0x41,
+        "KeyB" => 0x42,
+        "KeyC" => 0x43,
+        "KeyD" => 0x44,
+        "KeyE" => 0x45,
+        "KeyF" => 0x46,
+        "KeyG" => 0x47,
+        "KeyH" => 0x48,
+        "KeyI" => 0x49,
+        "KeyJ" => 0x4A,
+        "KeyK" => 0x4B,
+        "KeyL" => 0x4C,
+        "KeyM" => 0x4D,
+        "KeyN" => 0x4E,
+        "KeyO" => 0x4F,
+        "KeyP" => 0x50,
+        "KeyQ" => 0x51,
+        "KeyR" => 0x52,
+        "KeyS" => 0x53,
+        "KeyT" => 0x54,
+        "KeyU" => 0x55,
+        "KeyV" => 0x56,
+        "KeyW" => 0x57,
+        "KeyX" => 0x58,
+        "KeyY" => 0x59,
+        "KeyZ" => 0x5A,
+        "Digit0" => 0x30,
+        "Digit1" => 0x31,
+        "Digit2" => 0x32,
+        "Digit3" => 0x33,
+        "Digit4" => 0x34,
+        "Digit5" => 0x35,
+        "Digit6" => 0x36,
+        "Digit7" => 0x37,
+        "Digit8" => 0x38,
+        "Digit9" => 0x39,
+        "Space" => 0x20,
+        "Return" | "Enter" => 0x0D,
+        "Tab" => 0x09,
+        _ => 0,
     }
 }
 
@@ -248,5 +365,75 @@ mod tests {
         assert_eq!(s.llm_provider, "ollama");
         assert_eq!(s.ollama_url, "http://192.168.1.100:11434");
         assert_eq!(s.ollama_model, "mistral");
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_ptt_key_target_single_modifier() {
+        let s = Settings {
+            ptt_key: "AltLeft".to_string(),
+            ..Settings::default()
+        };
+        let t = s.ptt_key_target();
+        assert_eq!(t.modifier_mask, 0x20);
+        assert_eq!(t.regular_key, 0);
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_ptt_key_target_legacy_modifier() {
+        let s = Settings {
+            ptt_key: "left_option".to_string(),
+            ..Settings::default()
+        };
+        let t = s.ptt_key_target();
+        assert_eq!(t.modifier_mask, 0x20);
+        assert_eq!(t.regular_key, 0);
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_ptt_key_target_combo() {
+        let s = Settings {
+            ptt_key: "AltLeft+KeyZ".to_string(),
+            ..Settings::default()
+        };
+        let t = s.ptt_key_target();
+        assert_eq!(t.modifier_mask, 0x20); // NX_DEVICELALTKEYMASK
+        assert_eq!(t.regular_key, 0x06);  // CGKeyCode for Z
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn test_ptt_key_target_single_modifier_windows() {
+        let s = Settings {
+            ptt_key: "AltLeft".to_string(),
+            ..Settings::default()
+        };
+        let t = s.ptt_key_target();
+        assert_eq!(t.modifier_mask, 0xA4);
+        assert_eq!(t.regular_key, 0);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn test_ptt_key_target_combo_windows() {
+        let s = Settings {
+            ptt_key: "AltLeft+KeyZ".to_string(),
+            ..Settings::default()
+        };
+        let t = s.ptt_key_target();
+        assert_eq!(t.modifier_mask, 0xA4); // VK_LMENU
+        assert_eq!(t.regular_key, 0x5A);   // VK_Z
+    }
+
+    #[test]
+    fn test_ptt_key_target_unknown_regular_key_fallback() {
+        let s = Settings {
+            ptt_key: "AltLeft+KeyUnknown".to_string(),
+            ..Settings::default()
+        };
+        let t = s.ptt_key_target();
+        assert_eq!(t.regular_key, 0);
     }
 }

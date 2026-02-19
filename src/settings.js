@@ -25,9 +25,24 @@ const LEGACY_DISPLAY = {
   "right_control": "Right Control",
 };
 
+// Regular key display map: JS event.code → label
+const REGULAR_KEY_MAP = {
+  "KeyA": "A", "KeyB": "B", "KeyC": "C", "KeyD": "D", "KeyE": "E",
+  "KeyF": "F", "KeyG": "G", "KeyH": "H", "KeyI": "I", "KeyJ": "J",
+  "KeyK": "K", "KeyL": "L", "KeyM": "M", "KeyN": "N", "KeyO": "O",
+  "KeyP": "P", "KeyQ": "Q", "KeyR": "R", "KeyS": "S", "KeyT": "T",
+  "KeyU": "U", "KeyV": "V", "KeyW": "W", "KeyX": "X", "KeyY": "Y",
+  "KeyZ": "Z",
+  "Digit0": "0", "Digit1": "1", "Digit2": "2", "Digit3": "3", "Digit4": "4",
+  "Digit5": "5", "Digit6": "6", "Digit7": "7", "Digit8": "8", "Digit9": "9",
+  "Space": "Space", "Tab": "Tab", "Enter": "Enter",
+};
+
 // State
 let currentPttKey = "AltLeft";
 let isRecording = false;
+let recordingPhase = null; // null | "modifier" | "combo"
+let capturedModifier = null;
 let recordingMode = "hold";
 let dictTags = [];
 let dictTagsSnapshot = [];
@@ -37,6 +52,12 @@ let undoEntry = null; // { term, index }
 const el = (id) => document.getElementById(id);
 
 function displayNameFor(code) {
+  if (code && code.includes("+")) {
+    const [mod, key] = code.split("+");
+    const modName = KEY_MAP[mod] || LEGACY_DISPLAY[mod] || mod;
+    const keyName = REGULAR_KEY_MAP[key] || key;
+    return modName + " + " + keyName;
+  }
   return KEY_MAP[code] || LEGACY_DISPLAY[code] || code;
 }
 
@@ -47,13 +68,17 @@ function setPttKey(code) {
 
 function startRecording() {
   isRecording = true;
+  recordingPhase = "modifier";
+  capturedModifier = null;
   const btn = el("ptt-record");
-  btn.textContent = t("ptt.pressKey");
+  btn.textContent = t("ptt.holdModifier");
   btn.classList.add("recording");
 }
 
 function stopRecording() {
   isRecording = false;
+  recordingPhase = null;
+  capturedModifier = null;
   const btn = el("ptt-record");
   btn.classList.remove("recording");
   btn.textContent = displayNameFor(currentPttKey);
@@ -69,8 +94,26 @@ function handleKeyDown(e) {
     return;
   }
 
-  if (KEY_MAP[e.code]) {
-    currentPttKey = e.code;
+  if (recordingPhase === "modifier") {
+    if (KEY_MAP[e.code]) {
+      capturedModifier = e.code;
+      recordingPhase = "combo";
+      el("ptt-record").textContent = t("ptt.nowPressKey");
+    }
+  } else if (recordingPhase === "combo") {
+    // Only accept keys that the backend maps (REGULAR_KEY_MAP)
+    if (REGULAR_KEY_MAP[e.code]) {
+      currentPttKey = capturedModifier + "+" + e.code;
+      stopRecording();
+    }
+  }
+}
+
+function handleKeyUp(e) {
+  if (!isRecording || recordingPhase !== "combo") return;
+  // Modifier released without a regular key → store modifier only
+  if (e.code === capturedModifier) {
+    currentPttKey = capturedModifier;
     stopRecording();
   }
 }
@@ -231,8 +274,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  // Global keydown for recording
+  // Global keydown/keyup for recording
   document.addEventListener("keydown", handleKeyDown);
+  document.addEventListener("keyup", handleKeyUp);
 
   // Engine toggle
   el("engine").addEventListener("change", updateEngineVisibility);

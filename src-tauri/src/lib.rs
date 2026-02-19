@@ -583,7 +583,8 @@ fn save_settings(
     app: tauri::AppHandle,
 ) -> Result<(), String> {
     // Apply hotkey change
-    hotkey::set_hotkey_mask(new_settings.ptt_key_mask());
+    let t = new_settings.ptt_key_target();
+    hotkey::set_hotkey_target(t.modifier_mask, t.regular_key);
 
     // Apply window opacity
     if let Some(window) = app.get_webview_window("main") {
@@ -719,7 +720,8 @@ pub fn run() {
                 initial_settings.onboarding_complete,
                 initial_settings.recording_mode
             );
-            hotkey::set_hotkey_mask(initial_settings.ptt_key_mask());
+            let t = initial_settings.ptt_key_target();
+            hotkey::set_hotkey_target(t.modifier_mask, t.regular_key);
 
             // Register MurmurState with the resolved app_data_dir.
             // engine_init_done starts as `true` if model is not ready (nothing to wait for),

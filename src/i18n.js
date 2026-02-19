@@ -69,6 +69,8 @@ const I18N = {
     "onboard.retryDownload": "Retry Download",
     // Settings dynamic
     "ptt.pressKey": "Press a key...",
+    "ptt.holdModifier": "Hold modifier key...",
+    "ptt.nowPressKey": "Now press a key...",
     "dict.nTerms": "{n} terms",
     "dict.removedTerm": "Removed \"{term}\"",
     "status.saved": "Saved",
@@ -170,6 +172,8 @@ const I18N = {
     "onboard.downloading": "下載中...",
     "onboard.retryDownload": "重試下載",
     "ptt.pressKey": "按下按鍵...",
+    "ptt.holdModifier": "按住修飾鍵...",
+    "ptt.nowPressKey": "再按一個鍵...",
     "dict.nTerms": "{n} 個詞彙",
     "dict.removedTerm": "已移除「{term}」",
     "status.saved": "已儲存",
