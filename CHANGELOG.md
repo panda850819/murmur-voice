@@ -4,18 +4,6 @@ All notable changes to Murmur Voice are documented in this file.
 
 ## [Unreleased]
 
-### Added
-- UI language switching (English / 繁體中文) with DOM-based i18n
-- Changelog button in Settings (opens GitHub Releases)
-- Vision tagline and Roadmap link in settings footer
-
-### Changed
-- Preview auto-hide moved from backend 10s thread timer to frontend 5s JS timer; editing cancels timer, blur restarts it
-- New `hide_overlay_windows` Tauri command (frontend-driven hide)
-
-### Fixed
-- Update badge layout shift — added min-width and centered text
-
 ## [0.3.1] - 2026-02-19
 
 ### Added
@@ -26,6 +14,9 @@ All notable changes to Murmur Voice are documented in this file.
 - CJK word tokenization via `Intl.Segmenter` for accurate Chinese text diffing
 - "Add All" button for batch dictionary additions (2+ chips)
 - `pause_hotkey_listener` / `resume_hotkey_listener` Tauri commands for recording isolation
+- UI language switching (English / 繁體中文) with DOM-based i18n
+- Changelog button in Settings (opens GitHub Releases)
+- Vision tagline and Roadmap link in settings footer
 
 ### Changed
 - Hotkey system refactored: `HOTKEY_MASK` replaced with dual atomics (`MODIFIER_MASK` + `REGULAR_KEY`)
@@ -33,11 +24,14 @@ All notable changes to Murmur Voice are documented in this file.
 - macOS CGEventTap expanded to filter `kCGEventKeyDown`/`kCGEventKeyUp` alongside `kCGEventFlagsChanged`
 - Dictionary suggestion bar redesigned from single-word prompt to multi-chip layout
 - `ptt_key` settings field extended to accept combo format (`"AltLeft+KeyZ"`) — backward compatible
+- Preview auto-hide moved from backend 10s thread timer to frontend 5s JS timer; editing cancels timer, blur restarts it
+- New `hide_overlay_windows` Tauri command (frontend-driven hide)
 
 ### Fixed
 - Fix clipboard data leak on paste failure (#4)
 - Reuse buffers in audio recorder callback (#3)
 - Restrict combo key picker to backend-mapped keys only (prevents silent degradation)
+- Update badge layout shift — added min-width and centered text
 
 ## [0.3.0] - 2026-02-17
 
