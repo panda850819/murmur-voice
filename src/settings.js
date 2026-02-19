@@ -70,6 +70,7 @@ function startRecording() {
   isRecording = true;
   recordingPhase = "modifier";
   capturedModifier = null;
+  invoke("pause_hotkey_listener").catch(() => {});
   const btn = el("ptt-record");
   btn.textContent = t("ptt.holdModifier");
   btn.classList.add("recording");
@@ -79,6 +80,7 @@ function stopRecording() {
   isRecording = false;
   recordingPhase = null;
   capturedModifier = null;
+  invoke("resume_hotkey_listener").catch(() => {});
   const btn = el("ptt-record");
   btn.classList.remove("recording");
   btn.textContent = displayNameFor(currentPttKey);

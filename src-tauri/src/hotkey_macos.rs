@@ -21,6 +21,12 @@ pub(crate) fn set_hotkey_target(modifier: u64, regular_key: u32) {
     REGULAR_KEY.store(regular_key, Ordering::SeqCst);
 }
 
+/// Temporarily pause hotkey detection (set mask to 0 so nothing matches).
+pub(crate) fn pause_hotkey() {
+    MODIFIER_MASK.store(0, Ordering::SeqCst);
+    REGULAR_KEY.store(0, Ordering::SeqCst);
+}
+
 // CGEvent type constants
 const K_CG_EVENT_KEY_DOWN: u32 = 10;
 const K_CG_EVENT_KEY_UP: u32 = 11;

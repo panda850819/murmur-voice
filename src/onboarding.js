@@ -66,6 +66,7 @@ function startPttRecording() {
   isRecording = true;
   recordingPhase = "modifier";
   capturedModifier = null;
+  invoke("pause_hotkey_listener").catch(() => {});
   const btn = el("onboard-ptt-record");
   btn.textContent = t("ptt.holdModifier");
   btn.classList.add("recording");
@@ -75,6 +76,7 @@ function stopPttRecording() {
   isRecording = false;
   recordingPhase = null;
   capturedModifier = null;
+  invoke("resume_hotkey_listener").catch(() => {});
   const btn = el("onboard-ptt-record");
   btn.classList.remove("recording");
   btn.textContent = pttDisplayName(pttKey);

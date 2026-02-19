@@ -38,6 +38,12 @@ pub(crate) fn set_hotkey_target(modifier: u64, regular_key: u32) {
     REGULAR_KEY.store(regular_key, Ordering::SeqCst);
 }
 
+/// Temporarily pause hotkey detection (set mask to 0 so nothing matches).
+pub(crate) fn pause_hotkey() {
+    MODIFIER_MASK.store(0, Ordering::SeqCst);
+    REGULAR_KEY.store(0, Ordering::SeqCst);
+}
+
 unsafe extern "system" fn keyboard_hook_proc(
     n_code: i32,
     w_param: WPARAM,

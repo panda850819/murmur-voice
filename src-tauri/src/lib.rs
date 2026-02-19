@@ -638,6 +638,19 @@ fn copy_to_clipboard(text: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn pause_hotkey_listener() {
+    hotkey::pause_hotkey();
+}
+
+#[tauri::command]
+fn resume_hotkey_listener(state: tauri::State<'_, MurmurState>) {
+    if let Ok(s) = state.settings.lock() {
+        let t = s.ptt_key_target();
+        hotkey::set_hotkey_target(t.modifier_mask, t.regular_key);
+    }
+}
+
+#[tauri::command]
 fn add_dictionary_term(
     term: String,
     state: tauri::State<'_, MurmurState>,
@@ -704,6 +717,8 @@ pub fn run() {
             hide_overlay_windows,
             complete_onboarding,
             copy_to_clipboard,
+            pause_hotkey_listener,
+            resume_hotkey_listener,
             add_dictionary_term,
             check_for_updates,
             open_url,
