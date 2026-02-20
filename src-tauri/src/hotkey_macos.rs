@@ -2,10 +2,11 @@ use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum HotkeyEvent {
     Pressed,
     Released,
+    EventTapFailed,
 }
 
 /// The active PTT modifier mask. Updated at runtime via settings.
@@ -176,7 +177,8 @@ pub(crate) fn start_listener(
                 "failed to create event tap — grant Accessibility permission in \
                  System Settings > Privacy & Security > Accessibility"
             );
-            let _ = Box::from_raw(sender_ptr as *mut mpsc::Sender<HotkeyEvent>);
+            let sender = Box::from_raw(sender_ptr as *mut mpsc::Sender<HotkeyEvent>);
+            let _ = sender.send(HotkeyEvent::EventTapFailed);
             return;
         }
 

@@ -156,6 +156,10 @@ h1 {
   font-size: 13px;
   font-weight: 600;
 }
+.permission-status {
+  font-size: 13px;
+  margin-left: 4px;
+}
 
 .permission-hint {
   font-size: 11px;

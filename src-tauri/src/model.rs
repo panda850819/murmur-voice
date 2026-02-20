@@ -5,9 +5,22 @@ use thiserror::Error;
 use futures_util::StreamExt;
 use tokio::io::AsyncWriteExt;
 
-const MODEL_URL: &str =
-    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin";
-const EXPECTED_SIZE: u64 = 1_624_555_275;
+#[derive(Debug, Clone)]
+pub struct ModelConfig {
+    pub url: String,
+    pub filename: String,
+    pub expected_size: u64,
+}
+
+impl Default for ModelConfig {
+    fn default() -> Self {
+        Self {
+            url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin".to_string(),
+            filename: "ggml-large-v3-turbo.bin".to_string(),
+            expected_size: 1_624_555_275,
+        }
+    }
+}
 
 #[derive(Debug, Error)]
 pub(crate) enum ModelError {
@@ -34,22 +47,23 @@ pub(crate) fn model_dir(base: &Path) -> PathBuf {
     base.join("models")
 }
 
-pub(crate) fn model_path(base: &Path) -> PathBuf {
-    model_dir(base).join("ggml-large-v3-turbo.bin")
+pub(crate) fn model_path(base: &Path, filename: &str) -> PathBuf {
+    model_dir(base).join(filename)
 }
 
-pub(crate) fn is_model_ready(base: &Path) -> bool {
+pub(crate) fn is_model_ready(base: &Path, config: &ModelConfig) -> bool {
     // On Windows, migrate model from old macOS-style path (runs at most once per process)
     #[cfg(target_os = "windows")]
     {
         static MIGRATE: Once = Once::new();
         let base_owned = base.to_path_buf();
-        MIGRATE.call_once(move || migrate_model_from_old_path(&base_owned));
+        let filename_owned = config.filename.clone();
+        MIGRATE.call_once(move || migrate_model_from_old_path(&base_owned, &filename_owned));
     }
 
-    let path = model_path(base);
+    let path = model_path(base, &config.filename);
     match std::fs::metadata(&path) {
-        Ok(meta) => meta.len() == EXPECTED_SIZE,
+        Ok(meta) => meta.len() == config.expected_size,
         Err(_) => false,
     }
 }
@@ -57,8 +71,8 @@ pub(crate) fn is_model_ready(base: &Path) -> bool {
 /// On Windows, earlier versions stored the model under $HOME/Library/Application Support/...
 /// (a macOS path). Migrate it to the correct $APPDATA/... location if found.
 #[cfg(target_os = "windows")]
-fn migrate_model_from_old_path(base: &Path) {
-    let new_path = model_path(base);
+fn migrate_model_from_old_path(base: &Path, filename: &str) {
+    let new_path = model_path(base, filename);
     if new_path.exists() {
         return; // already at correct location
     }
@@ -70,7 +84,7 @@ fn migrate_model_from_old_path(base: &Path) {
                 .join("Application Support")
                 .join("com.murmur.voice")
                 .join("models")
-                .join("ggml-large-v3-turbo.bin")
+                .join(filename)
         });
 
     if let Some(old) = old_path {
@@ -97,7 +111,11 @@ fn migrate_model_from_old_path(base: &Path) {
     }
 }
 
-pub(crate) async fn download_model<F>(base: &Path, progress_callback: F) -> Result<(), ModelError>
+pub(crate) async fn download_model<F>(
+    base: &Path,
+    config: &ModelConfig,
+    progress_callback: F,
+) -> Result<(), ModelError>
 where
     F: Fn(u64, u64),
 {
@@ -106,16 +124,18 @@ where
         .await
         .map_err(|e| ModelError::CreateDir(e.to_string()))?;
 
-    let path = model_path(base);
+    let path = model_path(base, &config.filename);
 
     let client = reqwest::Client::new();
     let response = client
-        .get(MODEL_URL)
+        .get(&config.url)
         .send()
         .await
         .map_err(|e| ModelError::Download(e.to_string()))?;
 
-    let total_size = response.content_length().unwrap_or(EXPECTED_SIZE);
+    let total_size = response
+        .content_length()
+        .unwrap_or(config.expected_size);
 
     let mut file = tokio::fs::File::create(&path).await?;
     let stream = response.bytes_stream();
@@ -126,9 +146,9 @@ where
 
     // Verify size
     let actual_size = tokio::fs::metadata(&path).await?.len();
-    if actual_size != EXPECTED_SIZE {
+    if actual_size != config.expected_size {
         return Err(ModelError::SizeMismatch {
-            expected: EXPECTED_SIZE,
+            expected: config.expected_size,
             actual: actual_size,
         });
     }

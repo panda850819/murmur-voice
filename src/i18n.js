@@ -92,6 +92,8 @@ const I18N = {
     "state.error": "Error",
     "state.downloadingModel": "Downloading model... {pct}%",
     "state.downloadFailed": "Download failed",
+    "state.accessibilityError": "Accessibility required",
+    "state.accessibilityHint": "Grant permission in System Settings > Privacy & Security > Accessibility. It will auto-connect.",
     // Preview
     "preview.noSpeech": "No speech detected",
     "preview.copy": "Copy",
@@ -194,6 +196,8 @@ const I18N = {
     "state.error": "錯誤",
     "state.downloadingModel": "下載模型中... {pct}%",
     "state.downloadFailed": "下載失敗",
+    "state.accessibilityError": "需要輔助使用權限",
+    "state.accessibilityHint": "請至系統設定 > 隱私權與安全性 > 輔助使用 開啟權限，開啟後會自動連線。",
     "preview.noSpeech": "未偵測到語音",
     "preview.copy": "複製",
     "preview.copied": "已複製!",
