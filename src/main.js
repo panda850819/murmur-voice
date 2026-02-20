@@ -35,13 +35,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   await listen(EVENTS.MODEL_DOWNLOAD_PROGRESS, (event) => {
     const { downloaded, total } = event.payload;
     const pct = total > 0 ? (downloaded / total) * 100 : 0;
-    progressContainer.style.display = "block";
+    progressContainer.classList.remove("hidden");
     progressBar.style.width = pct + "%";
     setStatus(null, t("state.downloadingModel").replace("{pct}", Math.round(pct)));
   });
 
   await listen(EVENTS.MODEL_READY, () => {
-    progressContainer.style.display = "none";
+    progressContainer.classList.add("hidden");
     progressBar.style.width = "0%";
     setStatus(null, t("state.ready"));
   });
@@ -136,7 +136,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   } catch (_) {}
 
   if (!modelReady) {
-    progressContainer.style.display = "block";
+    progressContainer.classList.remove("hidden");
     setStatus(null, t("state.downloadingModel").replace(" {pct}%", ""));
     // Fire and forget — progress updates come via events above.
     invoke("download_model_cmd").catch((err) => {

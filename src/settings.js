@@ -130,20 +130,20 @@ function setRecordingMode(mode) {
 
 function updateEngineVisibility() {
   const isLocal = el("engine").value === "local";
-  el("model-section").style.display = isLocal ? "flex" : "none";
-  el("groq-section").style.display = isLocal ? "none" : "flex";
+  el("model-section").classList.toggle("hidden", !isLocal);
+  el("groq-section").classList.toggle("hidden", isLocal);
 }
 
 function updateLlmProviderVisibility() {
   const provider = el("llm-provider").value;
-  el("groq-llm-section").style.display = provider === "groq" ? "block" : "none";
-  el("ollama-section").style.display = provider === "ollama" ? "block" : "none";
-  el("custom-llm-section").style.display = provider === "custom" ? "block" : "none";
+  el("groq-llm-section").classList.toggle("hidden", provider !== "groq");
+  el("ollama-section").classList.toggle("hidden", provider !== "ollama");
+  el("custom-llm-section").classList.toggle("hidden", provider !== "custom");
 }
 
 function updateLlmVisibility() {
   const enabled = el("llm-enabled").checked;
-  el("llm-settings").style.display = enabled ? "block" : "none";
+  el("llm-settings").classList.toggle("hidden", !enabled);
   if (enabled) {
     updateLlmProviderVisibility();
   }
@@ -200,9 +200,9 @@ function showDictUndo(term, index) {
   undoEntry = { term, index };
   const container = el("dict-undo");
   el("dict-undo-text").textContent = t("dict.removedTerm").replace("{term}", term);
-  container.style.display = "flex";
+  container.classList.remove("hidden");
   undoTimer = setTimeout(() => {
-    container.style.display = "none";
+    container.classList.add("hidden");
     undoEntry = null;
     undoTimer = null;
   }, 4000);
@@ -215,7 +215,7 @@ function doDictUndo() {
   dictTags.splice(pos, 0, term);
   renderDictTags();
   if (undoTimer) clearTimeout(undoTimer);
-  el("dict-undo").style.display = "none";
+  el("dict-undo").classList.add("hidden");
   undoEntry = null;
   undoTimer = null;
 }

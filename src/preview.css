@@ -252,3 +252,7 @@ html, body {
 }
 
 /* Processing state handled by JS (appends animated dots to header text) */
+
+
+/* Utility */
+.hidden { display: none !important; }
