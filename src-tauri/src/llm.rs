@@ -482,4 +482,94 @@ mod tests {
         assert_eq!(enhancer.name(), "Custom");
         assert!(!enhancer.is_local());
     }
+
+    #[test]
+    fn test_has_cjk() {
+        assert!(!has_cjk("Hello World"));
+        assert!(!has_cjk("1234567890!@#$%^&*()"));
+        assert!(has_cjk("你好"));
+        assert!(has_cjk("Hello 你好"));
+        assert!(has_cjk("これは漢字です")); // Contains Kanji (CJK Unified Ideographs)
+        assert!(!has_cjk("これはひらがなです")); // Pure Hiragana - not in the current CJK ranges
+    }
+
+    #[test]
+    fn test_protect_english() {
+        // No CJK -> no change
+        let (text, placeholders) = protect_english("Hello world");
+        assert_eq!(text, "Hello world");
+        assert!(placeholders.is_empty());
+
+        // No English letters -> no change
+        let (text, placeholders) = protect_english("你好世界 123");
+        assert_eq!(text, "你好世界 123");
+        assert!(placeholders.is_empty());
+
+        // Mixed text -> placeholders
+        let (text, placeholders) = protect_english("你好 Hello 世界 World");
+        assert_eq!(text, "你好 __E0__ 世界 __E1__");
+        assert_eq!(placeholders.len(), 2);
+        assert_eq!(placeholders[0], ("__E0__".to_string(), "Hello".to_string()));
+        assert_eq!(placeholders[1], ("__E1__".to_string(), "World".to_string()));
+
+        // Word with numbers (alphanumeric)
+        let (text, placeholders) = protect_english("你好 V2 引擎");
+        assert_eq!(text, "你好 __E0__ 引擎");
+        assert_eq!(placeholders[0].1, "V2");
+
+        // Punctuation is preserved
+        let (text, placeholders) = protect_english("你好, Hello!");
+        assert_eq!(text, "你好, __E0__!");
+        assert_eq!(placeholders[0].1, "Hello");
+    }
+
+    #[test]
+    fn test_restore_english() {
+        let placeholders = vec![
+            ("__E0__".to_string(), "Hello".to_string()),
+            ("__E1__".to_string(), "World".to_string()),
+        ];
+
+        // Normal restoration
+        assert_eq!(
+            restore_english("你好 __E0__ 世界 __E1__", &placeholders),
+            "你好 Hello 世界 World"
+        );
+
+        // Multiple occurrences of same placeholder (if LLM repeats it)
+        assert_eq!(
+            restore_english("__E0__ and __E0__", &placeholders),
+            "Hello and Hello"
+        );
+
+        // No placeholders in text
+        assert_eq!(
+            restore_english("你好世界", &placeholders),
+            "你好世界"
+        );
+
+        // Empty placeholders list
+        assert_eq!(
+            restore_english("你好 __E0__", &[]),
+            "你好 __E0__"
+        );
+    }
+
+    #[test]
+    fn test_strip_llm_prefix() {
+        assert_eq!(strip_llm_prefix("最終輸出：你好"), "你好");
+        assert_eq!(strip_llm_prefix("最终输出: 你好"), "你好");
+        assert_eq!(strip_llm_prefix("Cleaned transcription: Hello"), "Hello");
+        assert_eq!(strip_llm_prefix("Output: Result"), "Result");
+        assert_eq!(strip_llm_prefix("  Cleaned:  Some text  "), "Some text");
+
+        // No prefix
+        assert_eq!(strip_llm_prefix("Just some text"), "Just some text");
+
+        // Prefix in the middle (should not strip)
+        assert_eq!(strip_llm_prefix("Note: Output: is here"), "Note: Output: is here");
+
+        // Multiple prefixes - should only strip one
+        assert_eq!(strip_llm_prefix("Output: Cleaned: text"), "Cleaned: text");
+    }
 }
