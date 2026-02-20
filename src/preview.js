@@ -263,7 +263,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     detectNewWords();
 
     // Restart auto-hide after editing
-    if (currentMode === "pasted") {
+    if (currentMode === TRANSCRIPTION_MODES.PASTED) {
       autoHideTimer = setTimeout(async () => {
         try {
           await invoke("hide_overlay_windows");
@@ -272,32 +272,32 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  await listen("recording_state_changed", (event) => {
+  await listen(EVENTS.RECORDING_STATE_CHANGED, (event) => {
     const state = event.payload;
     switch (state) {
-      case "starting":
+      case RECORDING_STATES.STARTING:
         reset();
         break;
-      case "recording":
+      case RECORDING_STATES.RECORDING:
         setHeader(t("state.listening"), false);
         break;
-      case "stopping":
+      case RECORDING_STATES.STOPPING:
         setHeader(t("state.stopping"), true);
         break;
-      case "transcribing":
+      case RECORDING_STATES.TRANSCRIBING:
         setHeader(t("state.transcribing"), true);
         setText("", null);
         break;
-      case "processing":
+      case RECORDING_STATES.PROCESSING:
         setHeader(t("state.processing"), true);
         break;
-      case "idle":
+      case RECORDING_STATES.IDLE:
         // Auto-hide is handled by the transcription_complete handler below.
         break;
     }
   });
 
-  await listen("partial_transcription", (event) => {
+  await listen(EVENTS.PARTIAL_TRANSCRIPTION, (event) => {
     const text = event.payload;
     if (text) {
       setText(text, null);
@@ -305,7 +305,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  await listen("transcription_complete", (event) => {
+  await listen(EVENTS.TRANSCRIPTION_COMPLETE, (event) => {
     const { text, mode } = event.payload;
     clearAutoHide();
     currentMode = mode;
@@ -326,7 +326,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       enableEditing();
 
       // Auto-hide: 5s for pasted mode, cancelled by editing
-      if (mode === "pasted" && text && text.trim().length > 0) {
+      if (mode === TRANSCRIPTION_MODES.PASTED && text && text.trim().length > 0) {
         autoHideTimer = setTimeout(async () => {
           try {
             await invoke("hide_overlay_windows");
@@ -336,14 +336,14 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  await listen("foreground_app_info", (event) => {
+  await listen(EVENTS.FOREGROUND_APP_INFO, (event) => {
     const { name } = event.payload;
     if (name && name !== "Unknown") {
       setAppBadge(name);
     }
   });
 
-  await listen("enhancer_info", (event) => {
+  await listen(EVENTS.ENHANCER_INFO, (event) => {
     const { name, local } = event.payload;
     const el = appBadge();
     if (el) {
