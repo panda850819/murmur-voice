@@ -1,6 +1,6 @@
 [package]
 name = "murmur-voice"
-version = "0.3.1"
+version = "0.3.2"
 description = "Privacy-first local voice-to-text"
 authors = ["panda"]
 edition = "2021"
