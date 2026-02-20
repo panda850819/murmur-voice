@@ -4,6 +4,7 @@ mod frontapp;
 mod hotkey;
 mod llm;
 mod model;
+mod prompts;
 mod settings;
 mod state;
 mod whisper;
