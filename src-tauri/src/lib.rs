@@ -163,7 +163,10 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
                         Err(_) => break,
                     };
                     match lock.as_ref() {
-                        Some(rec) => rec.peek_samples(),
+                        Some(rec) => rec.peek_samples().unwrap_or_else(|e| {
+                            log::warn!("failed to peek samples: {}", e);
+                            Vec::new()
+                        }),
                         None => break,
                     }
                 };

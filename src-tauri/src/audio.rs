@@ -17,6 +17,8 @@ pub(crate) enum AudioError {
     BuildStream(String),
     #[error("failed to start stream: {0}")]
     PlayStream(String),
+    #[error("failed to lock samples mutex: {0}")]
+    LockPoisoned(String),
 }
 
 impl serde::Serialize for AudioError {
@@ -214,11 +216,11 @@ impl AudioRecorder {
     }
 
     /// Returns a snapshot of the current audio samples without stopping recording.
-    pub(crate) fn peek_samples(&self) -> Vec<f32> {
+    pub(crate) fn peek_samples(&self) -> Result<Vec<f32>, AudioError> {
         self.samples
             .lock()
             .map(|s| s.clone())
-            .unwrap_or_default()
+            .map_err(|e| AudioError::LockPoisoned(e.to_string()))
     }
 
     pub(crate) fn stop(&mut self) -> Vec<f32> {
