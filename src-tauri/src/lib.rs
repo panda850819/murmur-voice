@@ -348,7 +348,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
             None => {
                 // Engine not available — retry init synchronously (task 4.4)
                 drop(engine_lock);
-                let model_path = model::model_path(&state.app_data_dir);
+                let model_path = model::model_path(&state.app_data_dir, &model::ModelConfig::default().filename);
                 let model_path_str = model_path
                     .to_str()
                     .ok_or("model path contains invalid UTF-8")?;
@@ -520,7 +520,7 @@ fn get_recording_state(state: tauri::State<'_, MurmurState>) -> String {
 
 #[tauri::command]
 fn is_model_ready(state: tauri::State<'_, MurmurState>) -> bool {
-    model::is_model_ready(&state.app_data_dir)
+    model::is_model_ready(&state.app_data_dir, &model::ModelConfig::default())
 }
 
 #[tauri::command]
@@ -529,7 +529,7 @@ async fn download_model_cmd(app: tauri::AppHandle) -> Result<(), String> {
     let base = murmur_state.app_data_dir.clone();
 
     let app_clone = app.clone();
-    model::download_model(&base, move |downloaded, total| {
+    model::download_model(&base, &model::ModelConfig::default(), move |downloaded, total| {
         let _ = app_clone.emit(
             "model_download_progress",
             serde_json::json!({
@@ -551,7 +551,7 @@ async fn download_model_cmd(app: tauri::AppHandle) -> Result<(), String> {
         }
     }
     let app_handle = app.clone();
-    let model_path = model::model_path(&base);
+    let model_path = model::model_path(&base, &model::ModelConfig::default().filename);
     std::thread::spawn(move || {
         let model_path_str = match model_path.to_str() {
             Some(s) => s.to_string(),
@@ -815,7 +815,7 @@ pub fn run() {
             // Register MurmurState with the resolved app_data_dir.
             // engine_init_done starts as `true` if model is not ready (nothing to wait for),
             // `false` if model exists (background thread will set it on completion).
-            let model_ready = model::is_model_ready(&app_data_dir);
+            let model_ready = model::is_model_ready(&app_data_dir, &model::ModelConfig::default());
             app.manage(MurmurState {
                 app_data_dir: app_data_dir.clone(),
                 app_state: state::AppState::new(),
@@ -908,7 +908,7 @@ pub fn run() {
             // Load whisper engine in background thread (non-blocking startup)
             if model_ready {
                 let app_handle = app.handle().clone();
-                let model_path = model::model_path(&app_data_dir);
+                let model_path = model::model_path(&app_data_dir, &model::ModelConfig::default().filename);
                 std::thread::spawn(move || {
                     let model_path_str = match model_path.to_str() {
                         Some(s) => s.to_string(),
