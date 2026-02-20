@@ -18,7 +18,7 @@ pnpm tauri build --features cuda
 cd src-tauri
 cargo check                                       # fast iteration
 cargo clippy --all-targets -- -D warnings          # lint (zero warnings policy)
-cargo test                                         # 16 tests (state.rs, llm.rs, settings.rs)
+cargo test --lib                                   # 36 tests (llm, settings, state, whisper, model, audio)
 cargo test test_valid_forward_transitions          # run a single test
 ```
 
@@ -32,10 +32,10 @@ Frontend (src/)                    Backend (src-tauri/src/)
 ├── settings.html   preferences    ├── audio.rs      cpal mic capture → 16kHz mono
 ├── preview.html    transcription  ├── whisper.rs    whisper-rs (Metal/CUDA)
 ├── onboarding.html first-run      ├── hotkey.rs     cfg dispatcher → _macos.rs / _windows.rs
-├── *.js            invoke/listen  ├── frontapp.rs   cfg dispatcher → _macos.rs / _windows.rs
-└── *.css                          ├── clipboard.rs  arboard + rdev (cfg gates for paste key)
-                                   ├── model.rs      HuggingFace model download
-                                   ├── settings.rs   JSON persistence + key mapping
+├── events.js       event consts   ├── frontapp.rs   cfg dispatcher → _macos.rs / _windows.rs
+├── i18n.js         localization   ├── clipboard.rs  arboard + rdev (cfg gates for paste key)
+├── *.js            invoke/listen  ├── model.rs      ModelConfig + HuggingFace download
+└── *.css                          ├── settings.rs   JSON persistence + key mapping
                                    ├── state.rs      recording state machine
                                    └── llm.rs        TextEnhancer trait + multi-provider LLM
 ```
@@ -114,7 +114,7 @@ Settings fields: `llm_provider` (groq|ollama|custom), `ollama_url`, `ollama_mode
 - **Shared state**: `MurmurState` with `Mutex<T>` fields, injected via `.manage()`. Includes `engine_init_done: (Mutex<bool>, Condvar)` for background engine readiness signaling.
 - **Background engine init**: TranscriptionEngine loads in a background `std::thread` during startup. Recording waits on Condvar if engine isn't ready yet. On failure, retries on first recording attempt.
 - **Threading**: hotkey listener (CFRunLoop on macOS / SetWindowsHookEx on Windows), audio capture (cpal callback), live transcription (std::thread), model download (tokio async), engine init (std::thread)
-- **Dynamic thread count**: `whisper.rs::optimal_threads()` uses `std::thread::available_parallelism()` with fallback to 4. Used in both warmup and transcription.
+- **Dynamic thread count**: `whisper.rs::optimal_threads()` → `calculate_threads()`: <=4 cores uses all, >4 reserves 2 for system/UI, caps at 8. Fallback to 4 if parallelism query fails.
 - **Hotkey mask**: `AtomicU64` updated at runtime when settings change, no restart needed
 - **Path resolution**: All paths resolved via Tauri's `app.path().app_data_dir()`, stored in `MurmurState.app_data_dir`. No `#[cfg]` path assembly — `model.rs` and `settings.rs` accept `base: &Path`.
 - **PTT keys**: Both legacy format (`left_option`) and JS `event.code` format (`AltLeft`) accepted in `ptt_key_mask()`
@@ -129,6 +129,10 @@ Settings fields: `llm_provider` (groq|ollama|custom), `ollama_url`, `ollama_mode
 - **Toggle mode** checks `app_state.current()` (not a local flag) to decide start/stop — this avoids desync after auto-stop timeout
 - **LLM post-processing prompt** must explicitly state input is raw transcription, not a question — otherwise the model answers instead of cleaning up. User message is prefixed with `[Raw transcription to clean up]`
 - **Windows model migration** runs at most once per process via `std::sync::Once` in `is_model_ready()`
+- **`macos-private-api` feature is required** in Cargo.toml — needed for transparent windows on macOS. Do NOT remove.
+- **Frontend event strings** are centralized in `src/events.js` (`EVENTS`, `RECORDING_STATES`, `TRANSCRIPTION_MODES`). Use these constants instead of magic strings.
+- **CSP**: `style-src` does NOT allow `unsafe-inline` — use `.hidden` CSS class (in each page's CSS) instead of inline `style="display:none"`. Toggle visibility with `classList.add/remove("hidden")`.
+- **Model config**: `ModelConfig` struct in `model.rs` holds URL, filename, expected size. Functions like `is_model_ready()`, `download_model()` accept `&ModelConfig`.
 - **CI uses `macos-14`** (not `macos-latest`) due to whisper-rs-sys i8mm build failure on newer ARM runners. whisper-rs is maintained on Codeberg (archived on GitHub); crates.io v0.15.1 predates the whisper.cpp fix
 - **Release workflow** produces 3 builds: macOS (.dmg), Windows CPU (.msi/.exe), Windows CUDA (-cuda.msi/-cuda.exe). CUDA job uses manual `pnpm tauri build` + `softprops/action-gh-release` (not `tauri-action`) to avoid filename collision with CPU build
 

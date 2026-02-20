@@ -325,13 +325,14 @@ window.addEventListener("DOMContentLoaded", async () => {
       copyBtn().classList.remove("hidden");
       enableEditing();
 
-      // Auto-hide: 5s for pasted mode, cancelled by editing
-      if (mode === TRANSCRIPTION_MODES.PASTED && text && text.trim().length > 0) {
+      // Auto-hide: 5s for pasted mode, 30s for clipboard mode
+      if (text && text.trim().length > 0) {
+        const delay = mode === TRANSCRIPTION_MODES.PASTED ? 5000 : 30000;
         autoHideTimer = setTimeout(async () => {
           try {
             await invoke("hide_overlay_windows");
           } catch (_) {}
-        }, 5000);
+        }, delay);
       }
     }
   });

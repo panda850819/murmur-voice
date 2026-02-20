@@ -152,7 +152,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     const accessible = await invoke("check_accessibility");
     if (!accessible) {
       setStatus("error", t("state.accessibilityError"));
-      transcription().textContent = t("state.accessibilityHint");
+      transcription.textContent = t("state.accessibilityHint");
     }
   } catch (_) {}
 });

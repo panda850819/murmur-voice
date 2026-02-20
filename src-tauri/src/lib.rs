@@ -885,6 +885,37 @@ pub fn run() {
                 }
             }
 
+            // Make overlay windows visible above fullscreen apps (macOS Spaces).
+            // alwaysOnTop + set_visible_on_all_workspaces is insufficient because
+            // fullscreen apps run in isolated Spaces with elevated window levels.
+            // We raise NSWindow level to kCGStatusWindowLevel (25) via raw ObjC FFI.
+            #[cfg(target_os = "macos")]
+            {
+                mod nswindow_ffi {
+                    extern "C" {
+                        pub fn sel_registerName(name: *const u8) -> *const std::ffi::c_void;
+                        pub fn objc_msgSend();
+                    }
+                }
+
+                for name in &["main", "preview"] {
+                    if let Some(w) = app.get_webview_window(name) {
+                        let _ = w.set_visible_on_all_workspaces(true);
+                        if let Ok(ns_win) = w.ns_window() {
+                            unsafe {
+                                let sel = nswindow_ffi::sel_registerName(b"setLevel:\0".as_ptr());
+                                let set_level: extern "C" fn(
+                                    *mut std::ffi::c_void,
+                                    *const std::ffi::c_void,
+                                    isize,
+                                ) = std::mem::transmute(nswindow_ffi::objc_msgSend as *const ());
+                                set_level(ns_win as *mut _, sel, 25);
+                            }
+                        }
+                    }
+                }
+            }
+
             // Position preview window above main bar (hidden by default)
             if let (Some(main_win), Some(preview_win)) = (
                 app.get_webview_window("main"),
