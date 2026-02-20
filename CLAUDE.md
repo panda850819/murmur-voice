@@ -42,7 +42,11 @@ Frontend (src/)                    Backend (src-tauri/src/)
 
 **IPC**: Frontend calls backend via `invoke("command")` (uses `window.__TAURI__.core.invoke` via `withGlobalTauri`), backend pushes to frontend via `app.emit("event", payload)`.
 
-**Four windows**: `main` (420x48, always-on-top bottom bar), `preview` (420x280, transcription result), `settings` (460x700, on-demand), `onboarding` (560x480, first-run only). All must be listed in `src-tauri/capabilities/default.json` to invoke Tauri commands.
+**Four windows**: `main` (420x48, always-on-top bottom bar, starts hidden), `preview` (420x280, transcription result), `settings` (460x700, on-demand), `onboarding` (560x480, first-run only). `main` and `preview` are defined in `tauri.conf.json`; `settings` and `onboarding` are created dynamically via `WebviewWindowBuilder` in `lib.rs`. All must be listed in `src-tauri/capabilities/default.json` to invoke Tauri commands.
+
+**NSPanel overlay (macOS)**: `main` and `preview` windows are converted to NSPanel via `tauri-nspanel` (v2.1 branch, git dep) at startup. Panel config: `NonactivatingPanel` style + `CanJoinAllSpaces | Stationary | FullScreenAuxiliary` + level 1001. This enables overlay on fullscreen apps. The `panel!` macro lives in `mod overlay_panel` with required traits in scope.
+
+**Tray menu**: Settings, Show/Hide toggle, Quit. Show/Hide controls `main_visible` and sets `manual_show` flag to suppress auto-hide after transcription.
 
 **Frontend is static files** served directly from `src/` (no build step, no bundler). Plain HTML/JS/CSS.
 
@@ -80,11 +84,16 @@ Hotkey release → do_stop_recording()
     else: whisper.transcribe() (local GPU)
   → if llm_enabled: create_enhancer() → TextEnhancer::enhance() (Groq/Ollama/Custom)
   → clipboard.insert_text(paste simulation) → emit result → preview window
+  → auto-hide main+preview after 3s (unless manual_show)
 ```
 
 State machine: `Idle → Starting → Recording → Stopping → Transcribing → [Processing] → Idle`
 
 Two recording modes: **Hold** (press=start, release=stop) and **Toggle** (press toggles, 5-min auto-stop).
+
+**Window visibility**: Main window starts hidden. Auto-shows when recording starts, auto-hides ~3s after transcription completes. `preview_generation: AtomicU64` prevents stale hide timers from closing newer results. If user manually shows via tray (`manual_show` flag), auto-hide is suppressed until next recording cycle.
+
+**ESC cancel**: Global ESC key cancels active recording. Emits `recording_cancelled` event to frontend. Resets state to Idle without transcribing.
 
 ## Transcription Engines
 
@@ -111,7 +120,7 @@ Settings fields: `llm_provider` (groq|ollama|custom), `ollama_url`, `ollama_mode
 
 ## Key Patterns
 
-- **Shared state**: `MurmurState` with `Mutex<T>` fields, injected via `.manage()`. Includes `engine_init_done: (Mutex<bool>, Condvar)` for background engine readiness signaling.
+- **Shared state**: `MurmurState` with `Mutex<T>` fields, injected via `.manage()`. Includes `engine_init_done: (Mutex<bool>, Condvar)` for background engine readiness signaling. Atomic fields: `preview_generation` (u64, timer invalidation), `main_visible` (bool), `manual_show` (bool, tray-triggered show suppresses auto-hide).
 - **Background engine init**: TranscriptionEngine loads in a background `std::thread` during startup. Recording waits on Condvar if engine isn't ready yet. On failure, retries on first recording attempt.
 - **Threading**: hotkey listener (CFRunLoop on macOS / SetWindowsHookEx on Windows), audio capture (cpal callback), live transcription (std::thread), model download (tokio async), engine init (std::thread)
 - **Dynamic thread count**: `whisper.rs::optimal_threads()` → `calculate_threads()`: <=4 cores uses all, >4 reserves 2 for system/UI, caps at 8. Fallback to 4 if parallelism query fails.
