@@ -436,4 +436,54 @@ mod tests {
         let t = s.ptt_key_target();
         assert_eq!(t.regular_key, 0);
     }
+
+    #[test]
+    fn test_whisper_initial_prompt_zh() {
+        let s = Settings {
+            language: "zh".to_string(),
+            dictionary: "".to_string(),
+            ..Settings::default()
+        };
+        assert_eq!(s.whisper_initial_prompt(), "繁體中文語音轉錄，使用台灣正體中文。");
+    }
+
+    #[test]
+    fn test_whisper_initial_prompt_auto() {
+        let s = Settings {
+            language: "auto".to_string(),
+            dictionary: "".to_string(),
+            ..Settings::default()
+        };
+        assert_eq!(s.whisper_initial_prompt(), "繁體中文語音轉錄，使用台灣正體中文。");
+    }
+
+    #[test]
+    fn test_whisper_initial_prompt_en() {
+        let s = Settings {
+            language: "en".to_string(),
+            dictionary: "".to_string(),
+            ..Settings::default()
+        };
+        assert_eq!(s.whisper_initial_prompt(), "");
+    }
+
+    #[test]
+    fn test_whisper_initial_prompt_with_dictionary() {
+        let s = Settings {
+            language: "en".to_string(),
+            dictionary: "Hello World".to_string(),
+            ..Settings::default()
+        };
+        assert_eq!(s.whisper_initial_prompt(), "Hello World");
+    }
+
+    #[test]
+    fn test_whisper_initial_prompt_zh_with_dictionary() {
+        let s = Settings {
+            language: "zh".to_string(),
+            dictionary: "Hello World".to_string(),
+            ..Settings::default()
+        };
+        assert_eq!(s.whisper_initial_prompt(), "繁體中文語音轉錄，使用台灣正體中文。 Hello World");
+    }
 }
