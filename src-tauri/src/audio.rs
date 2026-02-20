@@ -253,8 +253,13 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
     let output_len = (input.len() as f64 * ratio).ceil() as usize;
     output.reserve(output_len);
 
-    for i in 0..output_len {
-        let src_pos = i as f64 / ratio;
+    // Optimization: Calculate step size once and accumulate position using addition
+    // instead of division in the loop. This avoids expensive floating-point division
+    // on every sample (potentially millions per second).
+    let step = 1.0 / ratio;
+    let mut src_pos = 0.0;
+
+    for _ in 0..output_len {
         let src_idx = src_pos as usize;
         let frac = (src_pos - src_idx as f64) as f32;
 
@@ -267,6 +272,7 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
         };
 
         output.push(sample);
+        src_pos += step;
     }
 }
 
