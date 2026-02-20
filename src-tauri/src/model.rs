@@ -1,8 +1,8 @@
+use futures_util::StreamExt;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "windows")]
 use std::sync::Once;
 use thiserror::Error;
-use futures_util::StreamExt;
 use tokio::io::AsyncWriteExt;
 
 const MODEL_URL: &str =
@@ -63,15 +63,13 @@ fn migrate_model_from_old_path(base: &Path) {
         return; // already at correct location
     }
 
-    let old_path = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .map(|h| {
-            h.join("Library")
-                .join("Application Support")
-                .join("com.murmur.voice")
-                .join("models")
-                .join("ggml-large-v3-turbo.bin")
-        });
+    let old_path = std::env::var_os("HOME").map(PathBuf::from).map(|h| {
+        h.join("Library")
+            .join("Application Support")
+            .join("com.murmur.voice")
+            .join("models")
+            .join("ggml-large-v3-turbo.bin")
+    });
 
     if let Some(old) = old_path {
         if old.exists() {
@@ -158,7 +156,8 @@ where
         writer.write_all(data).await?;
         downloaded += data.len() as u64;
 
-        if downloaded == total_size || downloaded.saturating_sub(last_reported) >= REPORT_THRESHOLD {
+        if downloaded == total_size || downloaded.saturating_sub(last_reported) >= REPORT_THRESHOLD
+        {
             progress_callback(downloaded, total_size);
             last_reported = downloaded;
         }
@@ -200,6 +199,9 @@ mod tests {
         // 1. At 1.0MB (chunk 10) -> Call 1
         // 2. At 2.0MB (chunk 20) -> Call 2
         // 3. At 2.5MB (chunk 25/End) -> Call 3 (Total size reached)
-        assert_eq!(count, 3, "Callback should be called exactly 3 times (1MB, 2MB, End)");
+        assert_eq!(
+            count, 3,
+            "Callback should be called exactly 3 times (1MB, 2MB, End)"
+        );
     }
 }

@@ -288,8 +288,21 @@ fn settings_path(base: &Path) -> PathBuf {
 pub(crate) fn load_settings(base: &Path) -> Settings {
     let path = settings_path(base);
     match std::fs::read_to_string(&path) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
-        Err(_) => Settings::default(),
+        Ok(content) => match serde_json::from_str(&content) {
+            Ok(settings) => settings,
+            Err(e) => {
+                log::error!("Failed to parse settings file at {:?}: {}", path, e);
+                Settings::default()
+            }
+        },
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                log::info!("No settings file found at {:?}, using defaults", path);
+            } else {
+                log::error!("Failed to read settings file at {:?}: {}", path, e);
+            }
+            Settings::default()
+        }
     }
 }
 
@@ -400,7 +413,7 @@ mod tests {
         };
         let t = s.ptt_key_target();
         assert_eq!(t.modifier_mask, 0x20); // NX_DEVICELALTKEYMASK
-        assert_eq!(t.regular_key, 0x06);  // CGKeyCode for Z
+        assert_eq!(t.regular_key, 0x06); // CGKeyCode for Z
     }
 
     #[test]
@@ -424,7 +437,7 @@ mod tests {
         };
         let t = s.ptt_key_target();
         assert_eq!(t.modifier_mask, 0xA4); // VK_LMENU
-        assert_eq!(t.regular_key, 0x5A);   // VK_Z
+        assert_eq!(t.regular_key, 0x5A); // VK_Z
     }
 
     #[test]

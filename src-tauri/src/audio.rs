@@ -164,11 +164,13 @@ impl AudioRecorder {
                             // 1. Convert to Mono F32
                             if channels > 1 {
                                 for frame in data.chunks(channels as usize) {
-                                    let sum: f32 = frame.iter().map(|&s| s as f32 / i16::MAX as f32).sum();
+                                    let sum: f32 =
+                                        frame.iter().map(|&s| s as f32 / i16::MAX as f32).sum();
                                     intermediate.push(sum / channels as f32);
                                 }
                             } else {
-                                intermediate.extend(data.iter().map(|&s| s as f32 / i16::MAX as f32));
+                                intermediate
+                                    .extend(data.iter().map(|&s| s as f32 / i16::MAX as f32));
                             }
 
                             // 2. Resample or pass through
@@ -215,10 +217,7 @@ impl AudioRecorder {
 
     /// Returns a snapshot of the current audio samples without stopping recording.
     pub(crate) fn peek_samples(&self) -> Vec<f32> {
-        self.samples
-            .lock()
-            .map(|s| s.clone())
-            .unwrap_or_default()
+        self.samples.lock().map(|s| s.clone()).unwrap_or_default()
     }
 
     pub(crate) fn stop(&mut self) -> Vec<f32> {
@@ -228,11 +227,7 @@ impl AudioRecorder {
             let _ = handle.join();
         }
 
-        let samples = self
-            .samples
-            .lock()
-            .expect("samples mutex poisoned")
-            .clone();
+        let samples = self.samples.lock().expect("samples mutex poisoned").clone();
 
         // Short recording protection
         if samples.len() < MIN_SAMPLES {
@@ -295,12 +290,12 @@ mod tests {
         assert!((output[0] - 0.0).abs() < 1e-6); // idx 0
         assert!((output[1] - 0.5).abs() < 1e-6); // idx 0.5
         assert!((output[2] - 1.0).abs() < 1e-6); // idx 1.0
-        // idx 1.5 -> src_idx 1. (idx+1 out of bounds). input[1] = 1.0.
-        // 1.0 * (1-0.5) + (out_of_bounds? no, logic says if src_idx < len returns input[src_idx])
-        // wait, logic says:
-        // if src_idx + 1 < input.len() { lerp }
-        // else if src_idx < input.len() { input[src_idx] }
-        // else { 0.0 }
+                                                 // idx 1.5 -> src_idx 1. (idx+1 out of bounds). input[1] = 1.0.
+                                                 // 1.0 * (1-0.5) + (out_of_bounds? no, logic says if src_idx < len returns input[src_idx])
+                                                 // wait, logic says:
+                                                 // if src_idx + 1 < input.len() { lerp }
+                                                 // else if src_idx < input.len() { input[src_idx] }
+                                                 // else { 0.0 }
 
         // i=3. src_pos = 1.5. src_idx=1. frac=0.5.
         // src_idx+1 = 2. input len is 2. 2 < 2 is false.

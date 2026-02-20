@@ -126,8 +126,7 @@ unsafe extern "C" fn event_tap_callback(
             }
         }
         K_CG_EVENT_KEY_DOWN => {
-            let keycode =
-                CGEventGetIntegerValueField(event, K_CG_KEYBOARD_EVENT_KEYCODE) as u32;
+            let keycode = CGEventGetIntegerValueField(event, K_CG_KEYBOARD_EVENT_KEYCODE) as u32;
             if keycode == regular_key
                 && MODIFIER_HELD.load(Ordering::SeqCst)
                 && !COMBO_ACTIVE.load(Ordering::SeqCst)
@@ -138,8 +137,7 @@ unsafe extern "C" fn event_tap_callback(
             }
         }
         K_CG_EVENT_KEY_UP => {
-            let keycode =
-                CGEventGetIntegerValueField(event, K_CG_KEYBOARD_EVENT_KEYCODE) as u32;
+            let keycode = CGEventGetIntegerValueField(event, K_CG_KEYBOARD_EVENT_KEYCODE) as u32;
             if keycode == regular_key && COMBO_ACTIVE.swap(false, Ordering::SeqCst) {
                 let _ = sender.send(HotkeyEvent::Released);
                 return std::ptr::null_mut(); // consume event
@@ -151,13 +149,10 @@ unsafe extern "C" fn event_tap_callback(
     event
 }
 
-pub(crate) fn start_listener(
-    sender: mpsc::Sender<HotkeyEvent>,
-) -> std::thread::JoinHandle<()> {
+pub(crate) fn start_listener(sender: mpsc::Sender<HotkeyEvent>) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || unsafe {
-        let event_mask: u64 = (1 << K_CG_EVENT_KEY_DOWN)
-            | (1 << K_CG_EVENT_KEY_UP)
-            | (1 << K_CG_EVENT_FLAGS_CHANGED);
+        let event_mask: u64 =
+            (1 << K_CG_EVENT_KEY_DOWN) | (1 << K_CG_EVENT_KEY_UP) | (1 << K_CG_EVENT_FLAGS_CHANGED);
 
         let sender_box = Box::new(sender);
         let sender_ptr = Box::into_raw(sender_box) as *mut c_void;

@@ -106,9 +106,7 @@ unsafe extern "system" fn keyboard_hook_proc(
     CallNextHookEx(None, n_code, w_param, l_param)
 }
 
-pub(crate) fn start_listener(
-    sender: mpsc::Sender<HotkeyEvent>,
-) -> std::thread::JoinHandle<()> {
+pub(crate) fn start_listener(sender: mpsc::Sender<HotkeyEvent>) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || unsafe {
         GLOBAL_SENDER = Some(sender);
 

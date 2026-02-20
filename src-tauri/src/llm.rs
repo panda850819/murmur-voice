@@ -89,9 +89,8 @@ CRITICAL: Output ONLY the cleaned transcription. Nothing else. No explanations, 
 
 /// Returns true if the text contains CJK characters.
 fn has_cjk(text: &str) -> bool {
-    text.chars().any(|c| {
-        matches!(c as u32, 0x4E00..=0x9FFF | 0x3400..=0x4DBF | 0xF900..=0xFAFF)
-    })
+    text.chars()
+        .any(|c| matches!(c as u32, 0x4E00..=0x9FFF | 0x3400..=0x4DBF | 0xF900..=0xFAFF))
 }
 
 /// In mixed CJK+English text, replaces English words with numbered placeholders
@@ -293,7 +292,9 @@ impl TextEnhancer for OpenAICompatibleEnhancer {
 
 /// Creates the appropriate TextEnhancer based on current settings.
 /// Returns None if LLM is disabled or required config is missing.
-pub(crate) fn create_enhancer(settings: &crate::settings::Settings) -> Option<Box<dyn TextEnhancer>> {
+pub(crate) fn create_enhancer(
+    settings: &crate::settings::Settings,
+) -> Option<Box<dyn TextEnhancer>> {
     if !settings.llm_enabled {
         return None;
     }
@@ -461,7 +462,10 @@ mod tests {
         let enhancer = OpenAICompatibleEnhancer::groq("test-key", "llama-3.3-70b-versatile");
         assert_eq!(enhancer.name(), "Groq");
         assert!(!enhancer.is_local());
-        assert_eq!(enhancer.api_url, "https://api.groq.com/openai/v1/chat/completions");
+        assert_eq!(
+            enhancer.api_url,
+            "https://api.groq.com/openai/v1/chat/completions"
+        );
     }
 
     #[test]
@@ -469,7 +473,10 @@ mod tests {
         let enhancer = OpenAICompatibleEnhancer::ollama("http://localhost:11434", "llama3.2");
         assert_eq!(enhancer.name(), "Ollama");
         assert!(enhancer.is_local());
-        assert_eq!(enhancer.api_url, "http://localhost:11434/v1/chat/completions");
+        assert_eq!(
+            enhancer.api_url,
+            "http://localhost:11434/v1/chat/completions"
+        );
     }
 
     #[test]

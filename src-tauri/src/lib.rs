@@ -115,9 +115,7 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| format!("recorder mutex poisoned: {e}"))?;
     *recorder_lock = Some(recorder);
 
-    let _ = state
-        .app_state
-        .transition(state::RecordingState::Recording);
+    let _ = state.app_state.transition(state::RecordingState::Recording);
     let _ = app.emit("recording_state_changed", "recording");
 
     // Auto-stop after 5 minutes in toggle mode
@@ -188,7 +186,9 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
                         }
                     };
                     match engine_lock.as_ref() {
-                        Some(engine) => engine.transcribe(&samples, &language, &initial_prompt).unwrap_or_default(),
+                        Some(engine) => engine
+                            .transcribe(&samples, &language, &initial_prompt)
+                            .unwrap_or_default(),
                         None => {
                             // Engine not ready yet — wait and retry on next loop iteration
                             drop(engine_lock);
@@ -269,7 +269,12 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         if app_aware {
             let (name, style) = frontapp::foreground_app_bundle_id()
                 .as_deref()
-                .map(|bid| (frontapp::display_name_for_app(bid), frontapp::style_for_app(bid)))
+                .map(|bid| {
+                    (
+                        frontapp::display_name_for_app(bid),
+                        frontapp::style_for_app(bid),
+                    )
+                })
                 .unwrap_or(("Unknown", "default"));
             let _ = app.emit(
                 "foreground_app_info",
@@ -281,13 +286,22 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
     let (engine_type, language, initial_prompt, api_key_for_whisper) = state
         .settings
         .lock()
-        .map(|s| (
-            s.engine.clone(),
-            s.whisper_language().to_string(),
-            s.whisper_initial_prompt(),
-            s.groq_api_key.clone(),
-        ))
-        .unwrap_or_else(|_| ("local".to_string(), "auto".to_string(), String::new(), String::new()));
+        .map(|s| {
+            (
+                s.engine.clone(),
+                s.whisper_language().to_string(),
+                s.whisper_initial_prompt(),
+                s.groq_api_key.clone(),
+            )
+        })
+        .unwrap_or_else(|_| {
+            (
+                "local".to_string(),
+                "auto".to_string(),
+                String::new(),
+                String::new(),
+            )
+        });
 
     let raw_text = if engine_type == "groq" && !api_key_for_whisper.is_empty() {
         // Groq cloud Whisper
@@ -321,7 +335,9 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
             .lock()
             .map_err(|e| format!("engine mutex poisoned: {e}"))?;
         match engine_lock.as_ref() {
-            Some(engine) => engine.transcribe(&samples, &language, &initial_prompt).map_err(|e| e.to_string())?,
+            Some(engine) => engine
+                .transcribe(&samples, &language, &initial_prompt)
+                .map_err(|e| e.to_string())?,
             None => {
                 // Engine not available — retry init synchronously (task 4.4)
                 drop(engine_lock);
@@ -466,7 +482,10 @@ async fn check_for_updates() -> Result<UpdateCheckResult, String> {
         .await
         .map_err(|e| format!("request failed: {e}"))?;
 
-    let json: serde_json::Value = resp.json().await.map_err(|e| format!("parse failed: {e}"))?;
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("parse failed: {e}"))?;
     let tag = json["tag_name"].as_str().unwrap_or("unknown");
     let latest = tag.trim_start_matches('v');
     let url = json["html_url"]
@@ -569,11 +588,7 @@ fn stop_recording(app: tauri::AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 fn get_settings(state: tauri::State<'_, MurmurState>) -> settings::Settings {
-    state
-        .settings
-        .lock()
-        .map(|s| s.clone())
-        .unwrap_or_default()
+    state.settings.lock().map(|s| s.clone()).unwrap_or_default()
 }
 
 #[tauri::command]
@@ -651,10 +666,7 @@ fn resume_hotkey_listener(state: tauri::State<'_, MurmurState>) {
 }
 
 #[tauri::command]
-fn add_dictionary_term(
-    term: String,
-    state: tauri::State<'_, MurmurState>,
-) -> Result<(), String> {
+fn add_dictionary_term(term: String, state: tauri::State<'_, MurmurState>) -> Result<(), String> {
     let trimmed = term.trim();
     if trimmed.is_empty() {
         return Ok(());
@@ -725,7 +737,9 @@ pub fn run() {
         ])
         .setup(|app| {
             // Resolve app data directory from Tauri
-            let app_data_dir = app.path().app_data_dir()
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
                 .map_err(|e| format!("failed to resolve app data dir: {e}"))?;
 
             // Load settings from the resolved path
@@ -757,8 +771,7 @@ pub fn run() {
             // Create system tray with Settings + Quit
             let settings_item =
                 tauri::menu::MenuItem::with_id(app, "settings", "Settings...", true, None::<&str>)?;
-            let quit =
-                tauri::menu::MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let quit = tauri::menu::MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = tauri::menu::Menu::with_items(app, &[&settings_item, &quit])?;
             let _tray = tauri::tray::TrayIconBuilder::new()
                 .icon(app.default_window_icon().cloned().unwrap())
@@ -774,7 +787,10 @@ pub fn run() {
             // Check onboarding status
             let needs_onboarding = {
                 let s = app.state::<MurmurState>();
-                s.settings.lock().map(|s| !s.onboarding_complete).unwrap_or(false)
+                s.settings
+                    .lock()
+                    .map(|s| !s.onboarding_complete)
+                    .unwrap_or(false)
             };
 
             if needs_onboarding {
@@ -827,7 +843,8 @@ pub fn run() {
                         .unwrap_or(1.0);
                     let new_y = main_pos.y as f64 - (preview_h + gap) * scale;
                     use tauri::PhysicalPosition;
-                    let _ = preview_win.set_position(PhysicalPosition::new(main_pos.x, new_y as i32));
+                    let _ =
+                        preview_win.set_position(PhysicalPosition::new(main_pos.x, new_y as i32));
                 }
             }
 
@@ -884,9 +901,7 @@ pub fn run() {
                                 "toggle" => {
                                     // Debounce: skip if last toggle was < 500ms ago
                                     if let Some(last) = last_toggle {
-                                        if last.elapsed()
-                                            < std::time::Duration::from_millis(500)
-                                        {
+                                        if last.elapsed() < std::time::Duration::from_millis(500) {
                                             continue;
                                         }
                                     }
@@ -901,10 +916,10 @@ pub fn run() {
                                             let _ = murmur_state
                                                 .app_state
                                                 .transition(state::RecordingState::Idle);
-                                            let _ = app_handle
-                                                .emit("recording_state_changed", "idle");
-                                            let _ = app_handle
-                                                .emit("recording_error", e.to_string());
+                                            let _ =
+                                                app_handle.emit("recording_state_changed", "idle");
+                                            let _ =
+                                                app_handle.emit("recording_error", e.to_string());
                                             hide_preview_window(&app_handle);
                                             hide_main_window(&app_handle);
                                         }
@@ -914,10 +929,7 @@ pub fn run() {
                                                 is_recording = true;
                                             }
                                             Err(e) => {
-                                                log::error!(
-                                                    "failed to start recording: {}",
-                                                    e
-                                                );
+                                                log::error!("failed to start recording: {}", e);
                                             }
                                         }
                                     }

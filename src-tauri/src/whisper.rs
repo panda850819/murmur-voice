@@ -67,7 +67,12 @@ impl TranscriptionEngine {
         let _ = state.full(params, &dummy);
     }
 
-    pub(crate) fn transcribe(&self, samples: &[f32], language: &str, initial_prompt: &str) -> Result<String, WhisperError> {
+    pub(crate) fn transcribe(
+        &self,
+        samples: &[f32],
+        language: &str,
+        initial_prompt: &str,
+    ) -> Result<String, WhisperError> {
         if samples.len() < MIN_SAMPLES {
             return Ok(String::new());
         }
@@ -95,7 +100,7 @@ impl TranscriptionEngine {
         params.set_suppress_blank(true);
         params.set_no_speech_thold(0.6);
         params.set_temperature_inc(0.0); // disable temperature fallback — it just produces more hallucinations
-        params.set_entropy_thold(2.4);   // reject segments with high entropy (uncertain/hallucinated)
+        params.set_entropy_thold(2.4); // reject segments with high entropy (uncertain/hallucinated)
 
         if !initial_prompt.is_empty() {
             params.set_initial_prompt(initial_prompt);
@@ -109,11 +114,9 @@ impl TranscriptionEngine {
         let mut text = String::new();
         for i in 0..n_segments {
             if let Some(segment) = state.get_segment(i) {
-                let segment_text = segment
-                    .to_str()
-                    .map_err(|e: whisper_rs::WhisperError| {
-                        WhisperError::Transcription(e.to_string())
-                    })?;
+                let segment_text = segment.to_str().map_err(|e: whisper_rs::WhisperError| {
+                    WhisperError::Transcription(e.to_string())
+                })?;
                 text.push_str(segment_text);
             }
         }
