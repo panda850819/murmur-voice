@@ -893,7 +893,8 @@ pub fn run() {
             {
                 mod nswindow_ffi {
                     extern "C" {
-                        pub fn sel_registerName(name: *const u8) -> *const std::ffi::c_void;
+                        #![allow(clashing_extern_declarations)]
+                        pub fn sel_registerName(name: *const std::ffi::c_char) -> *const std::ffi::c_void;
                         pub fn objc_msgSend();
                     }
                 }
@@ -903,7 +904,7 @@ pub fn run() {
                         let _ = w.set_visible_on_all_workspaces(true);
                         if let Ok(ns_win) = w.ns_window() {
                             unsafe {
-                                let sel = nswindow_ffi::sel_registerName(b"setLevel:\0".as_ptr());
+                                let sel = nswindow_ffi::sel_registerName(c"setLevel:".as_ptr());
                                 let set_level: extern "C" fn(
                                     *mut std::ffi::c_void,
                                     *const std::ffi::c_void,
