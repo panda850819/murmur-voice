@@ -3,10 +3,23 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 
 const MIN_SAMPLES: usize = 16_000; // 1s at 16kHz — shorter clips produce hallucinations
 
+fn calculate_threads(available: usize) -> i32 {
+    if available <= 4 {
+        // Use all available threads if count is low (but at least 1)
+        std::cmp::max(1, available as i32)
+    } else {
+        // Reserve 2 threads for system/UI to keep app responsive
+        // Cap at 8 to avoid diminishing returns/overhead
+        let threads = available.saturating_sub(2);
+        std::cmp::min(threads, 8) as i32
+    }
+}
+
 fn optimal_threads() -> i32 {
-    std::thread::available_parallelism()
-        .map(|n| n.get() as i32)
-        .unwrap_or(4)
+    let available = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
+    calculate_threads(available)
 }
 
 #[derive(Debug, Error)]
@@ -119,5 +132,36 @@ impl TranscriptionEngine {
         }
 
         Ok(text.trim().to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_threads() {
+        let cases = vec![
+            (1, 1),
+            (2, 2),
+            (3, 3),
+            (4, 4),
+            (5, 3),
+            (6, 4),
+            (8, 6),
+            (10, 8),
+            (12, 8),
+            (16, 8),
+            (32, 8),
+        ];
+
+        for (input, expected) in cases {
+            assert_eq!(
+                calculate_threads(input),
+                expected,
+                "failed for input {}",
+                input
+            );
+        }
     }
 }
