@@ -123,6 +123,15 @@ window.addEventListener("DOMContentLoaded", async () => {
     }, 3000);
   });
 
+  await listen(EVENTS.RECORDING_CANCELLED, () => {
+    setStatus("error", t("state.cancelled"));
+    transcription.textContent = "";
+
+    setTimeout(() => {
+      setStatus(null, t("state.ready"));
+    }, 2000);
+  });
+
   // Right-click to open settings
   document.addEventListener("contextmenu", (e) => {
     e.preventDefault();

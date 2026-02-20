@@ -11,6 +11,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 pub(crate) enum HotkeyEvent {
     Pressed,
     Released,
+    EscCancel,
     EventTapFailed,
 }
 
@@ -57,6 +58,14 @@ unsafe extern "system" fn keyboard_hook_proc(
         let msg = w_param.0 as u32;
         let is_down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
         let is_up = msg == WM_KEYUP || msg == WM_SYSKEYUP;
+
+        // ESC key detection — cancel recording regardless of hotkey mode
+        if kb.vkCode == 0x1B && is_down {
+            if let Some(ref sender) = GLOBAL_SENDER {
+                let _ = sender.send(HotkeyEvent::EscCancel);
+            }
+            // Pass through to other apps (don't return early with LRESULT(1))
+        }
 
         if regular_vk != 0 {
             // Combo mode: modifier + regular key

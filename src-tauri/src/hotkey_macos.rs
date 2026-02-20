@@ -6,6 +6,7 @@ use std::sync::mpsc;
 pub(crate) enum HotkeyEvent {
     Pressed,
     Released,
+    EscCancel,
     EventTapFailed,
 }
 
@@ -97,6 +98,15 @@ unsafe extern "C" fn event_tap_callback(
 ) -> CGEventRef {
     let sender = &*(user_info as *const mpsc::Sender<HotkeyEvent>);
     let regular_key = REGULAR_KEY.load(Ordering::SeqCst);
+
+    // ESC key detection — cancel recording regardless of hotkey mode
+    if event_type == K_CG_EVENT_KEY_DOWN {
+        let keycode = CGEventGetIntegerValueField(event, K_CG_KEYBOARD_EVENT_KEYCODE) as u32;
+        if keycode == 0x35 {
+            let _ = sender.send(HotkeyEvent::EscCancel);
+            return event; // pass through ESC to other apps
+        }
+    }
 
     if regular_key == 0 {
         // Modifier-only mode — original edge detection logic (unchanged)

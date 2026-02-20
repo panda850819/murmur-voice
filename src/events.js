@@ -10,6 +10,7 @@ const EVENTS = {
   ACCESSIBILITY_ERROR: "accessibility_error",
   ACCESSIBILITY_GRANTED: "accessibility_granted",
   ENHANCER_INFO: "enhancer_info",
+  RECORDING_CANCELLED: "recording_cancelled",
 };
 
 const RECORDING_STATES = {

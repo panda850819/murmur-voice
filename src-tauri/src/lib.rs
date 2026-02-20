@@ -53,6 +53,10 @@ pub(crate) struct MurmurState {
     /// Generation counter for preview auto-hide timer cancellation.
     /// Incremented on each new recording; stale timers compare and bail out.
     preview_generation: AtomicU64,
+    /// Tracks whether the main window is currently visible.
+    main_visible: AtomicBool,
+    /// Set when user manually shows window via tray; suppresses auto-hide.
+    manual_show: AtomicBool,
 }
 
 /// Signal that engine initialization is complete (success or failure).
@@ -130,8 +134,10 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
 
     // Cancel any pending preview auto-hide timer
     state.preview_generation.fetch_add(1, Ordering::SeqCst);
+    state.manual_show.store(false, Ordering::SeqCst);
 
     show_main_window(app);
+    state.main_visible.store(true, Ordering::SeqCst);
     show_preview_window(app);
 
     state
@@ -146,6 +152,7 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
         let _ = app.emit("recording_state_changed", "idle");
         let _ = app.emit("recording_error", e.to_string());
         hide_main_window(app);
+        state.main_visible.store(false, Ordering::SeqCst);
         hide_preview_window(app);
         return Err(e.to_string());
     }
@@ -294,6 +301,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         let _ = state.app_state.transition(state::RecordingState::Idle);
         let _ = app.emit("recording_state_changed", "idle");
         hide_main_window(app);
+        state.main_visible.store(false, Ordering::SeqCst);
         hide_preview_window(app);
         return Ok(String::new());
     }
@@ -485,6 +493,23 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         serde_json::json!({ "text": text, "mode": output_mode }),
     );
 
+    // Auto-hide main window 3s after transcription complete
+    {
+        let app_hide = app.clone();
+        let gen = state.preview_generation.load(Ordering::SeqCst);
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            let ms = app_hide.state::<MurmurState>();
+            // Cancel if a new recording started (generation changed) or user manually showed
+            if ms.preview_generation.load(Ordering::SeqCst) == gen
+                && !ms.manual_show.load(Ordering::SeqCst)
+            {
+                hide_main_window(&app_hide);
+                ms.main_visible.store(false, Ordering::SeqCst);
+            }
+        });
+    }
+
     Ok(text)
 }
 
@@ -655,9 +680,6 @@ fn complete_onboarding(
     if let Ok(mut s) = state.settings.lock() {
         s.onboarding_complete = true;
         settings::save_settings(&s, &state.app_data_dir)?;
-    }
-    if let Some(w) = app.get_webview_window("main") {
-        let _ = w.show();
     }
     if let Some(w) = app.get_webview_window("onboarding") {
         let _ = w.close();
@@ -861,21 +883,42 @@ pub fn run() {
                 live_stop: AtomicBool::new(false),
                 live_thread: Mutex::new(None),
                 preview_generation: AtomicU64::new(0),
+                main_visible: AtomicBool::new(false),
+                manual_show: AtomicBool::new(false),
             });
 
-            // Create system tray with Settings + Quit
+            // Create system tray with Settings + Show/Hide + Quit
             let settings_item =
                 tauri::menu::MenuItem::with_id(app, "settings", "Settings...", true, None::<&str>)?;
+            let show_item =
+                tauri::menu::MenuItem::with_id(app, "show_toggle", "Show", true, None::<&str>)?;
             let quit =
                 tauri::menu::MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = tauri::menu::Menu::with_items(app, &[&settings_item, &quit])?;
+            let menu = tauri::menu::Menu::with_items(app, &[&settings_item, &show_item, &quit])?;
+            let show_item_ref = show_item.clone();
             let _tray = tauri::tray::TrayIconBuilder::new()
                 .icon(app.default_window_icon().cloned().unwrap())
                 .menu(&menu)
                 .tooltip("Murmur Voice")
-                .on_menu_event(|app, event| match event.id().as_ref() {
+                .on_menu_event(move |app, event| match event.id().as_ref() {
                     "quit" => app.exit(0),
                     "settings" => open_settings(app.clone()),
+                    "show_toggle" => {
+                        let ms = app.state::<MurmurState>();
+                        let visible = ms.main_visible.load(Ordering::SeqCst);
+                        if visible {
+                            hide_main_window(app);
+                            hide_preview_window(app);
+                            ms.main_visible.store(false, Ordering::SeqCst);
+                            ms.manual_show.store(false, Ordering::SeqCst);
+                            let _ = show_item_ref.set_text("Show");
+                        } else {
+                            show_main_window(app);
+                            ms.main_visible.store(true, Ordering::SeqCst);
+                            ms.manual_show.store(true, Ordering::SeqCst);
+                            let _ = show_item_ref.set_text("Hide");
+                        }
+                    }
                     _ => {}
                 })
                 .build(app)?;
@@ -1112,6 +1155,50 @@ pub fn run() {
                                 hide_preview_window(&app_handle);
                                 hide_main_window(&app_handle);
                             }
+                        }
+                        hotkey::HotkeyEvent::EscCancel => {
+                            let murmur_state = app_handle.state::<MurmurState>();
+                            if murmur_state.app_state.current()
+                                != state::RecordingState::Recording
+                            {
+                                continue; // Only cancel during active recording
+                            }
+
+                            // Stop live transcription
+                            murmur_state.live_stop.store(true, Ordering::SeqCst);
+                            if let Ok(mut lt) = murmur_state.live_thread.lock() {
+                                if let Some(handle) = lt.take() {
+                                    let _ = handle.join();
+                                }
+                            }
+
+                            // Stop audio capture and discard samples
+                            if let Ok(mut recorder_lock) = murmur_state.recorder.lock() {
+                                if let Some(recorder) = recorder_lock.as_mut() {
+                                    let _ = recorder.stop(); // discard samples
+                                }
+                            }
+
+                            is_recording = false;
+                            let _ = murmur_state
+                                .app_state
+                                .transition(state::RecordingState::Idle);
+                            let _ = app_handle.emit("recording_state_changed", "idle");
+                            let _ = app_handle.emit("recording_cancelled", ());
+
+                            // Hide windows after 2-second delay
+                            let app_hide = app_handle.clone();
+                            let gen =
+                                murmur_state.preview_generation.load(Ordering::SeqCst);
+                            std::thread::spawn(move || {
+                                std::thread::sleep(std::time::Duration::from_secs(2));
+                                let ms = app_hide.state::<MurmurState>();
+                                if ms.preview_generation.load(Ordering::SeqCst) == gen {
+                                    hide_main_window(&app_hide);
+                                    hide_preview_window(&app_hide);
+                                    ms.main_visible.store(false, Ordering::SeqCst);
+                                }
+                            });
                         }
                         hotkey::HotkeyEvent::EventTapFailed => unreachable!(),
                     }
