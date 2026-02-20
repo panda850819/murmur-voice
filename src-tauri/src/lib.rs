@@ -685,6 +685,50 @@ fn add_dictionary_term(
 }
 
 #[tauri::command]
+fn add_dictionary_terms(
+    terms: Vec<String>,
+    state: tauri::State<'_, MurmurState>,
+) -> Result<(), String> {
+    if terms.is_empty() {
+        return Ok(());
+    }
+
+    if let Ok(mut s) = state.settings.lock() {
+        let mut existing_vec: Vec<String> = s
+            .dictionary
+            .split(',')
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty())
+            .collect();
+
+        let mut existing_set: std::collections::HashSet<String> = existing_vec
+            .iter()
+            .map(|t| t.to_lowercase())
+            .collect();
+
+        let mut added = false;
+        for term in terms {
+            let trimmed = term.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if !existing_set.contains(&trimmed.to_lowercase()) {
+                existing_vec.push(trimmed.to_string());
+                existing_set.insert(trimmed.to_lowercase());
+                added = true;
+            }
+        }
+
+        if added {
+            s.dictionary = existing_vec.join(", ");
+            settings::save_settings(&s, &state.app_data_dir)?;
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 fn open_settings(app: tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("settings") {
         let _ = w.set_focus();
@@ -723,6 +767,7 @@ pub fn run() {
             pause_hotkey_listener,
             resume_hotkey_listener,
             add_dictionary_term,
+            add_dictionary_terms,
             check_for_updates,
             open_url,
         ])
