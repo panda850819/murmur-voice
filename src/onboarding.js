@@ -128,8 +128,22 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
-  // Poll Accessibility permission status
+  // Poll permission statuses
+  let micGranted = false;
   let accGranted = false;
+
+  async function checkMicStatus() {
+    try {
+      micGranted = await invoke("check_microphone");
+    } catch (_) {
+      micGranted = false;
+    }
+    const badge = el("mic-status");
+    if (badge) {
+      badge.textContent = micGranted ? "\u2705" : "\u274C";
+    }
+  }
+
   async function checkAccStatus() {
     try {
       accGranted = await invoke("check_accessibility");
@@ -141,10 +155,13 @@ window.addEventListener("DOMContentLoaded", async () => {
       badge.textContent = accGranted ? "\u2705" : "\u274C";
     }
   }
+
+  await checkMicStatus();
   await checkAccStatus();
-  const accPoll = setInterval(async () => {
-    await checkAccStatus();
-    if (accGranted) clearInterval(accPoll);
+  const permPoll = setInterval(async () => {
+    if (!micGranted) await checkMicStatus();
+    if (!accGranted) await checkAccStatus();
+    if (micGranted && accGranted) clearInterval(permPoll);
   }, 3000);
 
   // Step 3: Engine choice

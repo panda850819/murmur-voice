@@ -14,6 +14,23 @@ use std::sync::Mutex;
 use std::time::Instant;
 use tauri::{Emitter, Manager};
 
+// NSPanel type for overlay windows that render above fullscreen apps.
+// NSWindow cannot do this — only NSPanel subclasses can.
+#[cfg(target_os = "macos")]
+mod overlay_panel {
+    use tauri::Manager;
+    use tauri_nspanel::objc2::runtime::NSObjectProtocol;
+    use tauri_nspanel::objc2::{ClassType, Message};
+    tauri_nspanel::panel!(OverlayPanel {
+        config: {
+            is_floating_panel: true,
+            hides_on_deactivate: false,
+        }
+    });
+}
+#[cfg(target_os = "macos")]
+use overlay_panel::OverlayPanel;
+
 // UI Dimensions
 const PREVIEW_WINDOW_HEIGHT: f64 = 280.0;
 const PREVIEW_WINDOW_GAP: f64 = 8.0;
@@ -61,6 +78,10 @@ fn is_accessibility_trusted() -> bool {
 #[cfg(not(target_os = "macos"))]
 fn is_accessibility_trusted() -> bool {
     true
+}
+
+fn is_microphone_authorized() -> bool {
+    frontapp::is_microphone_authorized()
 }
 
 fn show_main_window(app: &tauri::AppHandle) {
@@ -666,6 +687,11 @@ fn check_accessibility() -> bool {
 }
 
 #[tauri::command]
+fn check_microphone() -> bool {
+    is_microphone_authorized()
+}
+
+#[tauri::command]
 fn pause_hotkey_listener() {
     hotkey::pause_hotkey();
 }
@@ -774,8 +800,15 @@ fn open_settings(app: tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
+    let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init());
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.plugin(tauri_nspanel::init());
+    }
+
+    builder
         .invoke_handler(tauri::generate_handler![
             get_recording_state,
             is_model_ready,
@@ -795,6 +828,7 @@ pub fn run() {
             add_dictionary_terms,
             check_for_updates,
             check_accessibility,
+            check_microphone,
             open_url,
         ])
         .setup(|app| {
@@ -885,33 +919,28 @@ pub fn run() {
                 }
             }
 
-            // Make overlay windows visible above fullscreen apps (macOS Spaces).
-            // We use raw ObjC FFI to set both collectionBehavior and window level,
-            // bypassing Tauri's set_visible_on_all_workspaces which may conflict.
-            // FullScreenAuxiliary (1<<8) opts into fullscreen Spaces;
-            // CanJoinAllSpaces (1<<0) spans all desktops;
-            // Stationary (1<<4) prevents the window from moving with space switches.
-            // Level 1000 (kCGScreenSaverWindowLevel) is above fullscreen app windows.
+            // Convert overlay windows to NSPanel so they render above fullscreen apps.
+            // NSWindow cannot overlay fullscreen apps regardless of level — only NSPanel can.
             #[cfg(target_os = "macos")]
             {
-                const BEHAVIOR_CAN_JOIN_ALL_SPACES: usize = 1 << 0;
-                const BEHAVIOR_STATIONARY: usize = 1 << 4;
-                const BEHAVIOR_FULL_SCREEN_AUXILIARY: usize = 1 << 8;
-                const OVERLAY_LEVEL: isize = 1000; // kCGScreenSaverWindowLevel
-
-                let behavior = BEHAVIOR_CAN_JOIN_ALL_SPACES
-                    | BEHAVIOR_STATIONARY
-                    | BEHAVIOR_FULL_SCREEN_AUXILIARY;
+                use tauri_nspanel::WebviewWindowExt;
+                use tauri_nspanel::panel::{NSWindowCollectionBehavior, NSWindowStyleMask};
 
                 for name in &["main", "preview"] {
                     if let Some(w) = app.get_webview_window(name) {
-                        if let Ok(ns_win) = w.ns_window() {
-                            unsafe {
-                                frontapp::set_ns_window_collection_behavior(
-                                    ns_win as *mut _,
-                                    behavior,
+                        match w.to_panel::<OverlayPanel>() {
+                            Ok(panel) => {
+                                panel.set_level(1001);
+                                panel.set_style_mask(NSWindowStyleMask::NonactivatingPanel);
+                                panel.set_collection_behavior(
+                                    NSWindowCollectionBehavior::CanJoinAllSpaces
+                                    | NSWindowCollectionBehavior::Stationary
+                                    | NSWindowCollectionBehavior::FullScreenAuxiliary,
                                 );
-                                frontapp::set_ns_window_level(ns_win as *mut _, OVERLAY_LEVEL);
+                                log::info!("converted '{}' to NSPanel for fullscreen overlay", name);
+                            }
+                            Err(e) => {
+                                log::warn!("failed to convert '{}' to NSPanel: {}", name, e);
                             }
                         }
                     }
