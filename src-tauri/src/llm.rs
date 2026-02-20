@@ -482,4 +482,37 @@ mod tests {
         assert_eq!(enhancer.name(), "Custom");
         assert!(!enhancer.is_local());
     }
+
+    #[test]
+    fn test_strip_llm_prefix() {
+        // Known prefixes
+        assert_eq!(strip_llm_prefix("最終輸出：Hello"), "Hello");
+        assert_eq!(strip_llm_prefix("最終輸出:Hello"), "Hello");
+        assert_eq!(strip_llm_prefix("最终输出：Hello"), "Hello");
+        assert_eq!(strip_llm_prefix("最终输出:Hello"), "Hello");
+        assert_eq!(strip_llm_prefix("Cleaned transcription: Hello"), "Hello");
+        assert_eq!(strip_llm_prefix("Cleaned: Hello"), "Hello");
+        assert_eq!(strip_llm_prefix("Output: Hello"), "Hello");
+
+        // No prefix
+        assert_eq!(strip_llm_prefix("Hello world"), "Hello world");
+        assert_eq!(strip_llm_prefix("No prefix here"), "No prefix here");
+
+        // Prefix embedded
+        assert_eq!(strip_llm_prefix("This contains Output: inside"), "This contains Output: inside");
+
+        // Multiple prefixes (only one stripped)
+        assert_eq!(strip_llm_prefix("Output: Cleaned: Hello"), "Cleaned: Hello");
+
+        // Whitespace handling
+        assert_eq!(strip_llm_prefix("   Output:   Hello   "), "Hello");
+        assert_eq!(strip_llm_prefix("\tCleaned:\tResult"), "Result");
+
+        // Empty string
+        assert_eq!(strip_llm_prefix(""), "");
+        assert_eq!(strip_llm_prefix("   "), "");
+
+        // Prefix only
+        assert_eq!(strip_llm_prefix("Output:"), "");
+    }
 }
