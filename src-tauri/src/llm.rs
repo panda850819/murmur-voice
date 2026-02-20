@@ -584,4 +584,20 @@ mod tests {
         // Multiple prefixes - should only strip one
         assert_eq!(strip_llm_prefix("Output: Cleaned: text"), "Cleaned: text");
     }
+
+    #[test]
+    fn test_build_system_prompt() {
+        let prompt_formal = build_system_prompt("formal");
+        assert!(prompt_formal.contains("Tone: formal and professional"));
+        assert!(prompt_formal.contains("You are a speech-to-text post-processor"));
+
+        let prompt_casual = build_system_prompt("casual");
+        assert!(prompt_casual.contains("Tone: casual and conversational"));
+
+        let prompt_technical = build_system_prompt("technical");
+        assert!(prompt_technical.contains("Tone: precise and technical"));
+
+        let prompt_default = build_system_prompt("unknown_style");
+        assert!(prompt_default.contains("Tone: natural and clear"));
+    }
 }
