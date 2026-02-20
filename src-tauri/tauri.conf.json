@@ -35,7 +35,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://cdn.buymeacoffee.com; connect-src 'self' https://api.groq.com https://huggingface.co https://*.huggingface.co http://localhost:11434"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://cdn.buymeacoffee.com; connect-src 'self' https://api.groq.com https://huggingface.co https://*.huggingface.co http://localhost:11434"
     }
   },
   "bundle": {

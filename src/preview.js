@@ -122,8 +122,8 @@ function showDictSuggestions(words) {
     container.appendChild(chip);
   });
   const addAllBtn = document.getElementById("dict-add-all-btn");
-  addAllBtn.style.display = words.length >= 2 ? "" : "none";
-  dictSuggest().style.display = "";
+  addAllBtn.classList.toggle("hidden", words.length < 2);
+  dictSuggest().classList.remove("hidden");
 }
 
 async function addDictWord(word, chipEl) {
@@ -154,11 +154,11 @@ function updateDictBar() {
     return;
   }
   const addAllBtn = document.getElementById("dict-add-all-btn");
-  addAllBtn.style.display = chips.length >= 2 ? "" : "none";
+  addAllBtn.classList.toggle("hidden", chips.length < 2);
 }
 
 function hideDictSuggest() {
-  dictSuggest().style.display = "none";
+  dictSuggest().classList.add("hidden");
   const container = dictChips();
   while (container.firstChild) container.removeChild(container.firstChild);
 }
@@ -174,7 +174,7 @@ function reset() {
   setCharCount("");
   setAppBadge(null);
   disableEditing();
-  copyBtn().style.display = "none";
+  copyBtn().classList.add("hidden");
   hideDictSuggest();
   currentMode = null;
   originalText = "";
@@ -314,7 +314,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       setHeader(t("state.done"), false);
       setText(t("preview.noSpeech"), "no-speech");
       setCharCount("");
-      copyBtn().style.display = "none";
+      copyBtn().classList.add("hidden");
       disableEditing();
     } else {
       setHeader(t("state.done"), false);
@@ -322,7 +322,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       setCharCount(text);
       scrollToBottom();
       originalText = text;
-      copyBtn().style.display = "";
+      copyBtn().classList.remove("hidden");
       enableEditing();
 
       // Auto-hide: 5s for pasted mode, cancelled by editing

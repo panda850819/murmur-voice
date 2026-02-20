@@ -58,7 +58,7 @@ function goToStep(n) {
 function updateDots() {
   const dot4 = document.querySelector('.dot[data-dot="4"]');
   if (dot4) {
-    dot4.style.display = chosenEngine === "groq" ? "none" : "";
+    dot4.classList.toggle("hidden", chosenEngine === "groq");
   }
 }
 
@@ -153,7 +153,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       document.querySelectorAll(".engine-card").forEach((c) => c.classList.remove("active"));
       card.classList.add("active");
       chosenEngine = card.dataset.engine;
-      el("groq-key-wrap").style.display = chosenEngine === "groq" ? "" : "none";
+      el("groq-key-wrap").classList.toggle("hidden", chosenEngine !== "groq");
       updateEngineNext();
       updateDots();
     });
@@ -174,20 +174,20 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Step 4: Model download
   const modelReady = await invoke("is_model_ready");
   if (modelReady) {
-    el("btn-download").style.display = "none";
-    el("btn-step4-next").style.display = "";
+    el("btn-download").classList.add("hidden");
+    el("btn-step4-next").classList.remove("hidden");
   }
 
   el("btn-download").addEventListener("click", async () => {
     el("btn-download").disabled = true;
     el("btn-download").textContent = t("onboard.downloading");
-    el("model-progress-wrap").style.display = "flex";
+    el("model-progress-wrap").classList.remove("hidden");
 
     try {
       await invoke("download_model_cmd");
-      el("model-progress-wrap").style.display = "none";
-      el("btn-download").style.display = "none";
-      el("btn-step4-next").style.display = "";
+      el("model-progress-wrap").classList.add("hidden");
+      el("btn-download").classList.add("hidden");
+      el("btn-step4-next").classList.remove("hidden");
     } catch (e) {
       el("btn-download").disabled = false;
       el("btn-download").textContent = t("onboard.retryDownload");

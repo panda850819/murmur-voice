@@ -116,3 +116,7 @@ html, body {
     box-shadow: 0 0 8px 2px currentColor;
   }
 }
+
+
+/* Utility */
+.hidden { display: none !important; }

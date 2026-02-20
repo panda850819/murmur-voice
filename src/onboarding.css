@@ -397,3 +397,7 @@ h1 {
   opacity: 1;
   transform: scale(1.2);
 }
+
+
+/* Utility */
+.hidden { display: none !important; }

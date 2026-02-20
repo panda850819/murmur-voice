@@ -68,7 +68,7 @@
               <option value="base">Base</option>
             </select>
           </div>
-          <div class="row groq-hint" id="groq-section" style="display: none;">
+          <div class="row groq-hint hidden" id="groq-section">
             <span class="row-label"></span>
             <span class="row-hint" data-i18n="hint.groqKey">API Key is in AI Processing below</span>
           </div>
@@ -81,7 +81,7 @@
               <div class="dict-tags" id="dict-tags"></div>
               <input type="text" id="dict-input" class="dict-input" placeholder="Type a term and press Enter" data-i18n="dict.placeholder" spellcheck="false" />
             </div>
-            <div id="dict-undo" class="dict-undo" style="display:none;">
+            <div id="dict-undo" class="dict-undo hidden">
               <span id="dict-undo-text" class="dict-undo-text"></span>
               <button id="dict-undo-btn" class="dict-undo-btn">Undo</button>
             </div>
@@ -100,7 +100,7 @@
             </label>
           </div>
           <div class="row-desc" data-i18n="hint.llm">Auto-clean filler words, add punctuation, fix grammar after transcription</div>
-          <div id="llm-settings" style="display: none;">
+          <div id="llm-settings" class="hidden">
             <div class="row">
               <span class="row-label" data-i18n="row.provider">Provider</span>
               <select id="llm-provider">
@@ -123,7 +123,7 @@
                 </select>
               </div>
             </div>
-            <div id="ollama-section" style="display: none;">
+            <div id="ollama-section" class="hidden">
               <div class="row-desc" data-i18n="hint.ollama">Runs locally, fully offline. Requires Ollama installed.</div>
               <div class="row">
                 <span class="row-label" data-i18n="row.url">URL</span>
@@ -134,7 +134,7 @@
                 <input type="text" id="ollama-model" placeholder="llama3.2" spellcheck="false" />
               </div>
             </div>
-            <div id="custom-llm-section" style="display: none;">
+            <div id="custom-llm-section" class="hidden">
               <div class="row">
                 <span class="row-label" data-i18n="row.endpoint">Endpoint</span>
                 <input type="text" id="custom-llm-url" placeholder="https://..." spellcheck="false" />

@@ -629,3 +629,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
   box-shadow: none;
   text-decoration: underline;
 }
+
+
+/* Utility */
+.hidden { display: none !important; }
