@@ -482,4 +482,70 @@ mod tests {
         assert_eq!(enhancer.name(), "Custom");
         assert!(!enhancer.is_local());
     }
+
+    #[test]
+    fn test_has_cjk() {
+        assert!(has_cjk("你好"));
+        assert!(has_cjk("Hello 你好"));
+        assert!(!has_cjk("Hello"));
+        assert!(!has_cjk("123"));
+    }
+
+    #[test]
+    fn test_protect_english_pure_cjk() {
+        let text = "你好世界";
+        let (protected, placeholders) = protect_english(text);
+        assert_eq!(protected, text);
+        assert!(placeholders.is_empty());
+    }
+
+    #[test]
+    fn test_protect_english_pure_english() {
+        let text = "Hello world";
+        let (protected, placeholders) = protect_english(text);
+        assert_eq!(protected, text);
+        assert!(placeholders.is_empty());
+    }
+
+    #[test]
+    fn test_protect_english_mixed() {
+        let text = "Hello 你好 World";
+        let (protected, placeholders) = protect_english(text);
+        assert_eq!(protected, "__E0__ 你好 __E1__");
+        assert_eq!(placeholders.len(), 2);
+        assert_eq!(placeholders[0], ("__E0__".to_string(), "Hello".to_string()));
+        assert_eq!(placeholders[1], ("__E1__".to_string(), "World".to_string()));
+    }
+
+    #[test]
+    fn test_protect_english_mixed_with_numbers() {
+        let text = "我喜欢 R2D2 机器人";
+        let (protected, placeholders) = protect_english(text);
+        assert_eq!(protected, "我喜欢 __E0__ 机器人");
+        assert_eq!(placeholders[0].1, "R2D2");
+    }
+
+    #[test]
+    fn test_restore_english() {
+        let text = "Hello 你好 World";
+        let (protected, placeholders) = protect_english(text);
+        let restored = restore_english(&protected, &placeholders);
+        assert_eq!(restored, text);
+    }
+
+    #[test]
+    fn test_protect_english_number_only() {
+        let text = "我有 123 个苹果";
+        let (protected, placeholders) = protect_english(text);
+        assert_eq!(protected, text);
+        assert!(placeholders.is_empty());
+    }
+
+    #[test]
+    fn test_protect_english_punctuation() {
+        let text = "Hello, 你好.";
+        let (protected, placeholders) = protect_english(text);
+        assert_eq!(protected, "__E0__, 你好.");
+        assert_eq!(placeholders[0].1, "Hello");
+    }
 }
