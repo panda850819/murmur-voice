@@ -482,4 +482,57 @@ mod tests {
         assert_eq!(enhancer.name(), "Custom");
         assert!(!enhancer.is_local());
     }
+
+    #[test]
+    fn test_has_cjk() {
+        assert!(has_cjk("你好"));
+        assert!(has_cjk("Hello 你好"));
+        assert!(has_cjk("测试")); // Simplified
+        assert!(has_cjk("測試")); // Traditional
+        assert!(has_cjk("漢字")); // Hanja (actual CJK characters)
+        assert!(has_cjk("中"));
+
+        assert!(!has_cjk("Hello"));
+        assert!(!has_cjk("123"));
+        assert!(!has_cjk("!@#"));
+        assert!(!has_cjk(""));
+
+        // Hiragana/Katakana/Hangul are NOT covered by current ranges
+        assert!(!has_cjk("こんにちは"));
+        assert!(!has_cjk("コンニチハ"));
+        assert!(!has_cjk("안녕하세요"));
+    }
+
+    #[test]
+    fn test_protect_english_mixed() {
+        let (protected, placeholders) = protect_english("Hello 你好 World");
+        // "Hello" -> __E0__, "World" -> __E1__
+        // " " is kept.
+        // "__E0__ 你好 __E1__"
+        assert_eq!(protected, "__E0__ 你好 __E1__");
+        assert_eq!(placeholders.len(), 2);
+        assert_eq!(placeholders[0], ("__E0__".to_string(), "Hello".to_string()));
+        assert_eq!(placeholders[1], ("__E1__".to_string(), "World".to_string()));
+    }
+
+    #[test]
+    fn test_protect_english_no_cjk() {
+        let (protected, placeholders) = protect_english("Hello World");
+        assert_eq!(protected, "Hello World");
+        assert!(placeholders.is_empty());
+
+        let (protected, placeholders) = protect_english("12345");
+        assert_eq!(protected, "12345");
+        assert!(placeholders.is_empty());
+    }
+
+    #[test]
+    fn test_restore_english() {
+        let placeholders = vec![
+            ("__E0__".to_string(), "Hello".to_string()),
+            ("__E1__".to_string(), "World".to_string()),
+        ];
+        let restored = restore_english("__E0__ 你好 __E1__", &placeholders);
+        assert_eq!(restored, "Hello 你好 World");
+    }
 }
