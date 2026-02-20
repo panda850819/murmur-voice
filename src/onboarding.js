@@ -194,7 +194,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  await listen("model_download_progress", (event) => {
+  await listen(EVENTS.MODEL_DOWNLOAD_PROGRESS, (event) => {
     const { downloaded, total } = event.payload;
     if (total > 0) {
       const pct = Math.round((downloaded / total) * 100);

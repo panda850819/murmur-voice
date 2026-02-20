@@ -32,7 +32,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   } catch (_) {}
 
   // Register ALL event listeners FIRST, before triggering any commands.
-  await listen("model_download_progress", (event) => {
+  await listen(EVENTS.MODEL_DOWNLOAD_PROGRESS, (event) => {
     const { downloaded, total } = event.payload;
     const pct = total > 0 ? (downloaded / total) * 100 : 0;
     progressContainer.style.display = "block";
@@ -40,32 +40,32 @@ window.addEventListener("DOMContentLoaded", async () => {
     setStatus(null, t("state.downloadingModel").replace("{pct}", Math.round(pct)));
   });
 
-  await listen("model_ready", () => {
+  await listen(EVENTS.MODEL_READY, () => {
     progressContainer.style.display = "none";
     progressBar.style.width = "0%";
     setStatus(null, t("state.ready"));
   });
 
-  await listen("recording_state_changed", (event) => {
+  await listen(EVENTS.RECORDING_STATE_CHANGED, (event) => {
     const state = event.payload;
     switch (state) {
-      case "starting":
+      case RECORDING_STATES.STARTING:
         setStatus("recording", t("state.starting"));
         transcription.textContent = "";
         break;
-      case "recording":
+      case RECORDING_STATES.RECORDING:
         setStatus("recording", t("state.listening"));
         break;
-      case "stopping":
+      case RECORDING_STATES.STOPPING:
         setStatus("transcribing", t("state.stopping"));
         break;
-      case "transcribing":
+      case RECORDING_STATES.TRANSCRIBING:
         setStatus("transcribing", t("state.transcribing"));
         break;
-      case "processing":
+      case RECORDING_STATES.PROCESSING:
         setStatus("transcribing", t("state.processing"));
         break;
-      case "idle":
+      case RECORDING_STATES.IDLE:
         setStatus(null, t("state.ready"));
         appBadge.classList.remove("visible");
         appBadge.textContent = "";
@@ -74,11 +74,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   // Live transcription updates while recording
-  await listen("partial_transcription", (event) => {
+  await listen(EVENTS.PARTIAL_TRANSCRIPTION, (event) => {
     transcription.textContent = event.payload;
   });
 
-  await listen("transcription_complete", (event) => {
+  await listen(EVENTS.TRANSCRIPTION_COMPLETE, (event) => {
     const { text } = event.payload;
     transcription.textContent = text || "";
     setStatus("done", t("state.done"));
@@ -88,7 +88,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }, 2000);
   });
 
-  await listen("foreground_app_info", (event) => {
+  await listen(EVENTS.FOREGROUND_APP_INFO, (event) => {
     const { name } = event.payload;
     const badge = appBadge;
     if (name && name !== "Unknown") {
@@ -97,22 +97,22 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  await listen("opacity_changed", (event) => {
+  await listen(EVENTS.OPACITY_CHANGED, (event) => {
     document.getElementById("app").style.background =
       `rgba(20, 20, 30, ${event.payload})`;
   });
 
-  await listen("accessibility_error", () => {
+  await listen(EVENTS.ACCESSIBILITY_ERROR, () => {
     setStatus("error", t("state.accessibilityError"));
-    transcription().textContent = t("state.accessibilityHint");
+    transcription.textContent = t("state.accessibilityHint");
   });
 
-  await listen("accessibility_granted", () => {
+  await listen(EVENTS.ACCESSIBILITY_GRANTED, () => {
     setStatus(null, t("state.ready"));
-    transcription().textContent = "";
+    transcription.textContent = "";
   });
 
-  await listen("recording_error", (event) => {
+  await listen(EVENTS.RECORDING_ERROR, (event) => {
     const errorMsg = event.payload;
     transcription.textContent = errorMsg;
     setStatus("error", t("state.error"));
