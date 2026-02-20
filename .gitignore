@@ -1,6 +1,12 @@
 # Claude Code
 .claude/
 
+# Jules
+.jules/
+
+# OpenSpec (changes are local working files)
+openspec/changes/
+
 # macOS
 .DS_Store
 
