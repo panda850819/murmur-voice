@@ -102,7 +102,9 @@ where
     F: Fn(u64, u64),
 {
     let dir = model_dir(base);
-    std::fs::create_dir_all(&dir).map_err(|e| ModelError::CreateDir(e.to_string()))?;
+    tokio::fs::create_dir_all(&dir)
+        .await
+        .map_err(|e| ModelError::CreateDir(e.to_string()))?;
 
     let path = model_path(base);
 
@@ -123,7 +125,7 @@ where
     file.sync_all().await?;
 
     // Verify size
-    let actual_size = std::fs::metadata(&path)?.len();
+    let actual_size = tokio::fs::metadata(&path).await?.len();
     if actual_size != EXPECTED_SIZE {
         return Err(ModelError::SizeMismatch {
             expected: EXPECTED_SIZE,
