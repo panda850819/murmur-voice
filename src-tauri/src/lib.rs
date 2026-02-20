@@ -696,6 +696,8 @@ fn hide_preview(app: tauri::AppHandle) {
 fn hide_overlay_windows(app: tauri::AppHandle) {
     hide_preview_window(&app);
     hide_main_window(&app);
+    let ms = app.state::<MurmurState>();
+    ms.main_visible.store(false, Ordering::SeqCst);
 }
 
 #[tauri::command]
