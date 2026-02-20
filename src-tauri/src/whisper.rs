@@ -43,17 +43,17 @@ impl TranscriptionEngine {
         let ctx = WhisperContext::new_with_params(model_path, params)
             .map_err(|e| WhisperError::ModelLoad(e.to_string()))?;
         let engine = Self { ctx };
-        engine.warmup();
+        engine.warmup()?;
         Ok(engine)
     }
 
     /// Run a short dummy inference to warm up CUDA/Metal kernels.
     /// Without this, the first real transcription is very slow due to JIT compilation.
-    fn warmup(&self) {
-        let Ok(mut state) = self.ctx.create_state() else {
-            log::warn!("warmup: failed to create state, first transcription may be slow");
-            return;
-        };
+    fn warmup(&self) -> Result<(), WhisperError> {
+        let mut state = self
+            .ctx
+            .create_state()
+            .map_err(|e| WhisperError::StateCreate(e.to_string()))?;
         // 1 second of silence at 16kHz
         let dummy = vec![0.0f32; 16_000];
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
@@ -64,7 +64,10 @@ impl TranscriptionEngine {
         params.set_print_special(false);
         params.set_print_timestamps(false);
         params.set_suppress_blank(true);
-        let _ = state.full(params, &dummy);
+        state
+            .full(params, &dummy)
+            .map_err(|e| WhisperError::Transcription(e.to_string()))?;
+        Ok(())
     }
 
     pub(crate) fn transcribe(&self, samples: &[f32], language: &str, initial_prompt: &str) -> Result<String, WhisperError> {
