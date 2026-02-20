@@ -14,6 +14,13 @@ use std::sync::Mutex;
 use std::time::Instant;
 use tauri::{Emitter, Manager};
 
+// UI Dimensions
+const PREVIEW_WINDOW_HEIGHT: f64 = 280.0;
+const PREVIEW_WINDOW_GAP: f64 = 8.0;
+const MAIN_WINDOW_WIDTH: f64 = 420.0;
+const MAIN_WINDOW_HEIGHT: f64 = 48.0;
+const MAIN_WINDOW_BOTTOM_MARGIN: f64 = 80.0;
+
 pub(crate) struct MurmurState {
     app_data_dir: PathBuf,
     app_state: state::AppState,
@@ -60,8 +67,8 @@ fn show_preview_window(app: &tauri::AppHandle) {
         // Position preview directly above the main bar
         if let Some(main_win) = app.get_webview_window("main") {
             if let Ok(main_pos) = main_win.outer_position() {
-                let preview_h = 280.0;
-                let gap = 8.0;
+                let preview_h = PREVIEW_WINDOW_HEIGHT;
+                let gap = PREVIEW_WINDOW_GAP;
                 let scale = main_win
                     .current_monitor()
                     .ok()
@@ -798,9 +805,9 @@ pub fn run() {
                 if let Some(monitor) = window.current_monitor().ok().flatten() {
                     let screen = monitor.size();
                     let scale = monitor.scale_factor();
-                    let win_w = 420.0;
-                    let win_h = 48.0;
-                    let margin = 80.0;
+                    let win_w = MAIN_WINDOW_WIDTH;
+                    let win_h = MAIN_WINDOW_HEIGHT;
+                    let margin = MAIN_WINDOW_BOTTOM_MARGIN;
                     let x = (screen.width as f64 / scale - win_w) / 2.0;
                     let y = screen.height as f64 / scale - win_h - margin;
                     use tauri::PhysicalPosition;
@@ -817,8 +824,8 @@ pub fn run() {
                 app.get_webview_window("preview"),
             ) {
                 if let Ok(main_pos) = main_win.outer_position() {
-                    let preview_h = 280.0;
-                    let gap = 8.0;
+                    let preview_h = PREVIEW_WINDOW_HEIGHT;
+                    let gap = PREVIEW_WINDOW_GAP;
                     let scale = main_win
                         .current_monitor()
                         .ok()
