@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 fn default_hold() -> String {
     "hold".to_string()
@@ -190,95 +192,103 @@ fn modifier_mask_for(key: &str) -> u64 {
 /// Maps JS `event.code` strings to macOS CGKeyCode values.
 #[cfg(target_os = "macos")]
 fn keycode_for_code(code: &str) -> u32 {
-    match code {
-        "KeyA" => 0x00,
-        "KeyS" => 0x01,
-        "KeyD" => 0x02,
-        "KeyF" => 0x03,
-        "KeyH" => 0x04,
-        "KeyG" => 0x05,
-        "KeyZ" => 0x06,
-        "KeyX" => 0x07,
-        "KeyC" => 0x08,
-        "KeyV" => 0x09,
-        "KeyB" => 0x0B,
-        "KeyQ" => 0x0C,
-        "KeyW" => 0x0D,
-        "KeyE" => 0x0E,
-        "KeyR" => 0x0F,
-        "KeyY" => 0x10,
-        "KeyT" => 0x11,
-        "Digit1" => 0x12,
-        "Digit2" => 0x13,
-        "Digit3" => 0x14,
-        "Digit4" => 0x15,
-        "Digit6" => 0x16,
-        "Digit5" => 0x17,
-        "Digit9" => 0x19,
-        "Digit7" => 0x1A,
-        "Digit8" => 0x1C,
-        "Digit0" => 0x1D,
-        "KeyO" => 0x1F,
-        "KeyU" => 0x20,
-        "KeyI" => 0x22,
-        "KeyP" => 0x23,
-        "Return" | "Enter" => 0x24,
-        "KeyL" => 0x25,
-        "KeyJ" => 0x26,
-        "KeyK" => 0x28,
-        "KeyN" => 0x2D,
-        "KeyM" => 0x2E,
-        "Tab" => 0x30,
-        "Space" => 0x31,
-        _ => 0,
-    }
+    static MAP: OnceLock<HashMap<&'static str, u32>> = OnceLock::new();
+    let map = MAP.get_or_init(|| {
+        let mut m = HashMap::new();
+        m.insert("KeyA", 0x00);
+        m.insert("KeyS", 0x01);
+        m.insert("KeyD", 0x02);
+        m.insert("KeyF", 0x03);
+        m.insert("KeyH", 0x04);
+        m.insert("KeyG", 0x05);
+        m.insert("KeyZ", 0x06);
+        m.insert("KeyX", 0x07);
+        m.insert("KeyC", 0x08);
+        m.insert("KeyV", 0x09);
+        m.insert("KeyB", 0x0B);
+        m.insert("KeyQ", 0x0C);
+        m.insert("KeyW", 0x0D);
+        m.insert("KeyE", 0x0E);
+        m.insert("KeyR", 0x0F);
+        m.insert("KeyY", 0x10);
+        m.insert("KeyT", 0x11);
+        m.insert("Digit1", 0x12);
+        m.insert("Digit2", 0x13);
+        m.insert("Digit3", 0x14);
+        m.insert("Digit4", 0x15);
+        m.insert("Digit6", 0x16);
+        m.insert("Digit5", 0x17);
+        m.insert("Digit9", 0x19);
+        m.insert("Digit7", 0x1A);
+        m.insert("Digit8", 0x1C);
+        m.insert("Digit0", 0x1D);
+        m.insert("KeyO", 0x1F);
+        m.insert("KeyU", 0x20);
+        m.insert("KeyI", 0x22);
+        m.insert("KeyP", 0x23);
+        m.insert("Return", 0x24);
+        m.insert("Enter", 0x24);
+        m.insert("KeyL", 0x25);
+        m.insert("KeyJ", 0x26);
+        m.insert("KeyK", 0x28);
+        m.insert("KeyN", 0x2D);
+        m.insert("KeyM", 0x2E);
+        m.insert("Tab", 0x30);
+        m.insert("Space", 0x31);
+        m
+    });
+    *map.get(code).unwrap_or(&0)
 }
 
 /// Maps JS `event.code` strings to Windows Virtual Key codes.
 #[cfg(target_os = "windows")]
 fn keycode_for_code(code: &str) -> u32 {
-    match code {
-        "KeyA" => 0x41,
-        "KeyB" => 0x42,
-        "KeyC" => 0x43,
-        "KeyD" => 0x44,
-        "KeyE" => 0x45,
-        "KeyF" => 0x46,
-        "KeyG" => 0x47,
-        "KeyH" => 0x48,
-        "KeyI" => 0x49,
-        "KeyJ" => 0x4A,
-        "KeyK" => 0x4B,
-        "KeyL" => 0x4C,
-        "KeyM" => 0x4D,
-        "KeyN" => 0x4E,
-        "KeyO" => 0x4F,
-        "KeyP" => 0x50,
-        "KeyQ" => 0x51,
-        "KeyR" => 0x52,
-        "KeyS" => 0x53,
-        "KeyT" => 0x54,
-        "KeyU" => 0x55,
-        "KeyV" => 0x56,
-        "KeyW" => 0x57,
-        "KeyX" => 0x58,
-        "KeyY" => 0x59,
-        "KeyZ" => 0x5A,
-        "Digit0" => 0x30,
-        "Digit1" => 0x31,
-        "Digit2" => 0x32,
-        "Digit3" => 0x33,
-        "Digit4" => 0x34,
-        "Digit5" => 0x35,
-        "Digit6" => 0x36,
-        "Digit7" => 0x37,
-        "Digit8" => 0x38,
-        "Digit9" => 0x39,
-        "Space" => 0x20,
-        "Return" | "Enter" => 0x0D,
-        "Tab" => 0x09,
-        _ => 0,
-    }
+    static MAP: OnceLock<HashMap<&'static str, u32>> = OnceLock::new();
+    let map = MAP.get_or_init(|| {
+        let mut m = HashMap::new();
+        m.insert("KeyA", 0x41);
+        m.insert("KeyB", 0x42);
+        m.insert("KeyC", 0x43);
+        m.insert("KeyD", 0x44);
+        m.insert("KeyE", 0x45);
+        m.insert("KeyF", 0x46);
+        m.insert("KeyG", 0x47);
+        m.insert("KeyH", 0x48);
+        m.insert("KeyI", 0x49);
+        m.insert("KeyJ", 0x4A);
+        m.insert("KeyK", 0x4B);
+        m.insert("KeyL", 0x4C);
+        m.insert("KeyM", 0x4D);
+        m.insert("KeyN", 0x4E);
+        m.insert("KeyO", 0x4F);
+        m.insert("KeyP", 0x50);
+        m.insert("KeyQ", 0x51);
+        m.insert("KeyR", 0x52);
+        m.insert("KeyS", 0x53);
+        m.insert("KeyT", 0x54);
+        m.insert("KeyU", 0x55);
+        m.insert("KeyV", 0x56);
+        m.insert("KeyW", 0x57);
+        m.insert("KeyX", 0x58);
+        m.insert("KeyY", 0x59);
+        m.insert("KeyZ", 0x5A);
+        m.insert("Digit0", 0x30);
+        m.insert("Digit1", 0x31);
+        m.insert("Digit2", 0x32);
+        m.insert("Digit3", 0x33);
+        m.insert("Digit4", 0x34);
+        m.insert("Digit5", 0x35);
+        m.insert("Digit6", 0x36);
+        m.insert("Digit7", 0x37);
+        m.insert("Digit8", 0x38);
+        m.insert("Digit9", 0x39);
+        m.insert("Space", 0x20);
+        m.insert("Return", 0x0D);
+        m.insert("Enter", 0x0D);
+        m.insert("Tab", 0x09);
+        m
+    });
+    *map.get(code).unwrap_or(&0)
 }
 
 fn settings_path(base: &Path) -> PathBuf {
@@ -435,5 +445,25 @@ mod tests {
         };
         let t = s.ptt_key_target();
         assert_eq!(t.regular_key, 0);
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_keycode_for_code_macos() {
+        assert_eq!(keycode_for_code("KeyA"), 0x00);
+        assert_eq!(keycode_for_code("Space"), 0x31);
+        assert_eq!(keycode_for_code("Return"), 0x24);
+        assert_eq!(keycode_for_code("Enter"), 0x24);
+        assert_eq!(keycode_for_code("Unknown"), 0);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn test_keycode_for_code_windows() {
+        assert_eq!(keycode_for_code("KeyA"), 0x41);
+        assert_eq!(keycode_for_code("Space"), 0x20);
+        assert_eq!(keycode_for_code("Return"), 0x0D);
+        assert_eq!(keycode_for_code("Enter"), 0x0D);
+        assert_eq!(keycode_for_code("Unknown"), 0);
     }
 }
