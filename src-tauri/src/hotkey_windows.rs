@@ -7,10 +7,11 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum HotkeyEvent {
     Pressed,
     Released,
+    EventTapFailed,
 }
 
 /// The active PTT modifier virtual key code. Updated at runtime via settings.
@@ -122,6 +123,9 @@ pub(crate) fn start_listener(
             }
             Err(e) => {
                 log::error!("failed to install keyboard hook: {}", e);
+                if let Some(ref sender) = GLOBAL_SENDER {
+                    let _ = sender.send(HotkeyEvent::EventTapFailed);
+                }
             }
         }
     })

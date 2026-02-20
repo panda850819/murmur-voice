@@ -128,6 +128,25 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
+  // Poll Accessibility permission status
+  let accGranted = false;
+  async function checkAccStatus() {
+    try {
+      accGranted = await invoke("check_accessibility");
+    } catch (_) {
+      accGranted = false;
+    }
+    const badge = el("acc-status");
+    if (badge) {
+      badge.textContent = accGranted ? "\u2705" : "\u274C";
+    }
+  }
+  await checkAccStatus();
+  const accPoll = setInterval(async () => {
+    await checkAccStatus();
+    if (accGranted) clearInterval(accPoll);
+  }, 3000);
+
   // Step 3: Engine choice
   document.querySelectorAll(".engine-card").forEach((card) => {
     card.addEventListener("click", () => {

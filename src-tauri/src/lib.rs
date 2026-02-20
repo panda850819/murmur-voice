@@ -50,6 +50,19 @@ fn signal_engine_init_done(app: &tauri::AppHandle) {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn is_accessibility_trusted() -> bool {
+    extern "C" {
+        fn AXIsProcessTrusted() -> bool;
+    }
+    unsafe { AXIsProcessTrusted() }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn is_accessibility_trusted() -> bool {
+    true
+}
+
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
@@ -648,6 +661,11 @@ fn copy_to_clipboard(text: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn check_accessibility() -> bool {
+    is_accessibility_trusted()
+}
+
+#[tauri::command]
 fn pause_hotkey_listener() {
     hotkey::pause_hotkey();
 }
@@ -776,6 +794,7 @@ pub fn run() {
             add_dictionary_term,
             add_dictionary_terms,
             check_for_updates,
+            check_accessibility,
             open_url,
         ])
         .setup(|app| {
@@ -919,12 +938,27 @@ pub fn run() {
             // Start hotkey listener
             let app_handle = app.handle().clone();
             let (sender, receiver) = std::sync::mpsc::channel();
+            let retry_sender = sender.clone();
             hotkey::start_listener(sender);
 
             std::thread::spawn(move || {
                 let mut is_recording = false;
                 let mut last_toggle: Option<Instant> = None;
                 while let Ok(event) = receiver.recv() {
+                    if event == hotkey::HotkeyEvent::EventTapFailed {
+                        let _ = app_handle.emit("accessibility_error", ());
+                        // Poll until Accessibility is granted, then retry
+                        loop {
+                            std::thread::sleep(std::time::Duration::from_secs(3));
+                            if is_accessibility_trusted() {
+                                hotkey::start_listener(retry_sender.clone());
+                                let _ = app_handle.emit("accessibility_granted", ());
+                                break;
+                            }
+                        }
+                        continue;
+                    }
+
                     let mode = {
                         let ms = app_handle.state::<MurmurState>();
                         ms.settings
@@ -1016,6 +1050,7 @@ pub fn run() {
                                 hide_main_window(&app_handle);
                             }
                         }
+                        hotkey::HotkeyEvent::EventTapFailed => unreachable!(),
                     }
                 }
             });

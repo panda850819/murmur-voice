@@ -102,6 +102,16 @@ window.addEventListener("DOMContentLoaded", async () => {
       `rgba(20, 20, 30, ${event.payload})`;
   });
 
+  await listen("accessibility_error", () => {
+    setStatus("error", t("state.accessibilityError"));
+    transcription().textContent = t("state.accessibilityHint");
+  });
+
+  await listen("accessibility_granted", () => {
+    setStatus(null, t("state.ready"));
+    transcription().textContent = "";
+  });
+
   await listen("recording_error", (event) => {
     const errorMsg = event.payload;
     transcription.textContent = errorMsg;
@@ -136,4 +146,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   } else {
     setStatus(null, t("state.ready"));
   }
+
+  // Check Accessibility permission (macOS: required for hotkey)
+  try {
+    const accessible = await invoke("check_accessibility");
+    if (!accessible) {
+      setStatus("error", t("state.accessibilityError"));
+      transcription().textContent = t("state.accessibilityHint");
+    }
+  } catch (_) {}
 });
