@@ -886,30 +886,32 @@ pub fn run() {
             }
 
             // Make overlay windows visible above fullscreen apps (macOS Spaces).
-            // alwaysOnTop + set_visible_on_all_workspaces is insufficient because
-            // fullscreen apps run in isolated Spaces with elevated window levels.
-            // We raise NSWindow level to kCGStatusWindowLevel (25) via raw ObjC FFI.
+            // We use raw ObjC FFI to set both collectionBehavior and window level,
+            // bypassing Tauri's set_visible_on_all_workspaces which may conflict.
+            // FullScreenAuxiliary (1<<8) opts into fullscreen Spaces;
+            // CanJoinAllSpaces (1<<0) spans all desktops;
+            // Stationary (1<<4) prevents the window from moving with space switches.
+            // Level 1000 (kCGScreenSaverWindowLevel) is above fullscreen app windows.
             #[cfg(target_os = "macos")]
             {
-                mod nswindow_ffi {
-                    extern "C" {
-                        pub fn sel_registerName(name: *const u8) -> *const std::ffi::c_void;
-                        pub fn objc_msgSend();
-                    }
-                }
+                const BEHAVIOR_CAN_JOIN_ALL_SPACES: usize = 1 << 0;
+                const BEHAVIOR_STATIONARY: usize = 1 << 4;
+                const BEHAVIOR_FULL_SCREEN_AUXILIARY: usize = 1 << 8;
+                const OVERLAY_LEVEL: isize = 1000; // kCGScreenSaverWindowLevel
+
+                let behavior = BEHAVIOR_CAN_JOIN_ALL_SPACES
+                    | BEHAVIOR_STATIONARY
+                    | BEHAVIOR_FULL_SCREEN_AUXILIARY;
 
                 for name in &["main", "preview"] {
                     if let Some(w) = app.get_webview_window(name) {
-                        let _ = w.set_visible_on_all_workspaces(true);
                         if let Ok(ns_win) = w.ns_window() {
                             unsafe {
-                                let sel = nswindow_ffi::sel_registerName(b"setLevel:\0".as_ptr());
-                                let set_level: extern "C" fn(
-                                    *mut std::ffi::c_void,
-                                    *const std::ffi::c_void,
-                                    isize,
-                                ) = std::mem::transmute(nswindow_ffi::objc_msgSend as *const ());
-                                set_level(ns_win as *mut _, sel, 25);
+                                frontapp::set_ns_window_collection_behavior(
+                                    ns_win as *mut _,
+                                    behavior,
+                                );
+                                frontapp::set_ns_window_level(ns_win as *mut _, OVERLAY_LEVEL);
                             }
                         }
                     }

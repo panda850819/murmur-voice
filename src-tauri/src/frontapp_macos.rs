@@ -205,6 +205,23 @@ extern "C" {
     fn objc_msgSend(obj: *mut Object, sel: Sel) -> *mut Object;
 }
 
+/// Sets the NSWindow level for an NSWindow pointer obtained from Tauri's `ns_window()`.
+/// Level 25 = kCGStatusWindowLevel, visible above fullscreen apps.
+pub(crate) unsafe fn set_ns_window_level(ns_win: *mut std::ffi::c_void, level: isize) {
+    let sel = sel_registerName(c"setLevel:".as_ptr());
+    let set_level: extern "C" fn(*mut std::ffi::c_void, Sel, isize) =
+        std::mem::transmute(objc_msgSend as *const ());
+    set_level(ns_win, sel, level);
+}
+
+/// Sets NSWindow collectionBehavior bitmask (NSWindowCollectionBehavior*).
+pub(crate) unsafe fn set_ns_window_collection_behavior(ns_win: *mut std::ffi::c_void, mask: usize) {
+    let sel = sel_registerName(c"setCollectionBehavior:".as_ptr());
+    let set_behavior: extern "C" fn(*mut std::ffi::c_void, Sel, usize) =
+        std::mem::transmute(objc_msgSend as *const ());
+    set_behavior(ns_win, sel, mask);
+}
+
 // --- Accessibility API FFI bindings ---
 
 extern "C" {
