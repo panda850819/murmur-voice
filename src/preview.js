@@ -218,16 +218,21 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Dict suggestion handlers
   document.getElementById("dict-add-all-btn").addEventListener("click", async () => {
-    const chips = dictChips().querySelectorAll(".dict-chip:not(.added)");
-    for (const chip of chips) {
-      const word = chip.textContent;
-      try {
-        await invoke("add_dictionary_term", { term: word });
-        addedWords.add(word.toLowerCase());
+    const chips = Array.from(dictChips().querySelectorAll(".dict-chip:not(.added)"));
+    const words = chips.map((chip) => {
+      let w = chip.textContent;
+      if (w.startsWith("+ ")) w = w.substring(2);
+      return w;
+    });
+
+    try {
+      await invoke("add_dictionary_terms", { terms: words });
+      chips.forEach((chip, i) => {
+        addedWords.add(words[i].toLowerCase());
         chip.textContent = t("preview.dictAdded");
         chip.classList.add("added");
-      } catch (_) {}
-    }
+      });
+    } catch (_) {}
     setTimeout(() => hideDictSuggest(), 800);
   });
 
