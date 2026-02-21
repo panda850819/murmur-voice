@@ -253,8 +253,11 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
     let output_len = (input.len() as f64 * ratio).ceil() as usize;
     output.reserve(output_len);
 
+    // Optimization: Pre-calculate inverse ratio to use multiplication instead of division
+    let inv_ratio = 1.0 / ratio;
+
     for i in 0..output_len {
-        let src_pos = i as f64 / ratio;
+        let src_pos = i as f64 * inv_ratio;
         let src_idx = src_pos as usize;
         let frac = (src_pos - src_idx as f64) as f32;
 
