@@ -891,13 +891,11 @@ pub fn run() {
             // We raise NSWindow level to kCGStatusWindowLevel (25) via raw ObjC FFI.
             #[cfg(target_os = "macos")]
             {
-                // Re-declare with allow to silence the warning for this specific usage where signatures differ
-                // from other FFI declarations (specifically frontapp_macos.rs).
-                // We use c_char for the argument to match C, but return types differ as we treat them as opaque pointers here.
-                #[allow(clashing_extern_declarations)]
-                extern "C" {
-                    fn sel_registerName(name: *const std::ffi::c_char) -> *const std::ffi::c_void;
-                    fn objc_msgSend();
+                mod nswindow_ffi {
+                    extern "C" {
+                        pub fn sel_registerName(name: *const u8) -> *const std::ffi::c_void;
+                        pub fn objc_msgSend();
+                    }
                 }
 
                 for name in &["main", "preview"] {
@@ -905,14 +903,12 @@ pub fn run() {
                         let _ = w.set_visible_on_all_workspaces(true);
                         if let Ok(ns_win) = w.ns_window() {
                             unsafe {
-                                // Use C-string literal syntax (c"...")
-                                let sel = sel_registerName(c"setLevel:".as_ptr());
-                                // Transmute objc_msgSend to the specific signature we need: (id, SEL, NSInteger) -> void
+                                let sel = nswindow_ffi::sel_registerName(b"setLevel:\0".as_ptr());
                                 let set_level: extern "C" fn(
                                     *mut std::ffi::c_void,
                                     *const std::ffi::c_void,
                                     isize,
-                                ) = std::mem::transmute(objc_msgSend as *const ());
+                                ) = std::mem::transmute(nswindow_ffi::objc_msgSend as *const ());
                                 set_level(ns_win as *mut _, sel, 25);
                             }
                         }
