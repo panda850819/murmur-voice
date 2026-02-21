@@ -136,3 +136,6 @@ fn explorer_has_input_focus() -> bool {
 pub(crate) fn is_microphone_authorized() -> bool {
     true
 }
+
+/// No-op on Windows — microphone access doesn't need explicit permission request.
+pub(crate) fn request_microphone_access() {}

@@ -156,6 +156,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
+  // Trigger macOS mic permission dialog (no-op if already granted/denied)
+  invoke("request_microphone").catch(() => {});
+
   await checkMicStatus();
   await checkAccStatus();
   const permPoll = setInterval(async () => {

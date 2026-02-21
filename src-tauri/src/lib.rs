@@ -341,6 +341,22 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         ))
         .unwrap_or_else(|_| ("local".to_string(), "auto".to_string(), String::new(), String::new()));
 
+    // Anti-hallucination: skip if audio is too short or silent (applies to all engines)
+    const MIN_TRANSCRIBE_SAMPLES: usize = 16_000; // 1s at 16kHz
+    if samples.len() < MIN_TRANSCRIBE_SAMPLES {
+        log::info!("audio too short ({} samples), skipping transcription", samples.len());
+        let _ = state.app_state.transition(state::RecordingState::Idle);
+        let _ = app.emit("recording_state_changed", "idle");
+        return Ok(String::new());
+    }
+    let energy: f32 = samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32;
+    if energy < 1e-6 {
+        log::info!("audio energy too low ({energy:.2e}), skipping transcription");
+        let _ = state.app_state.transition(state::RecordingState::Idle);
+        let _ = app.emit("recording_state_changed", "idle");
+        return Ok(String::new());
+    }
+
     let raw_text = if engine_type == "groq" && !api_key_for_whisper.is_empty() {
         // Groq cloud Whisper
         let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
@@ -716,6 +732,11 @@ fn check_microphone() -> bool {
 }
 
 #[tauri::command]
+fn request_microphone() {
+    frontapp::request_microphone_access();
+}
+
+#[tauri::command]
 fn pause_hotkey_listener() {
     hotkey::pause_hotkey();
 }
@@ -854,6 +875,7 @@ pub fn run() {
             check_for_updates,
             check_accessibility,
             check_microphone,
+            request_microphone,
             open_url,
         ])
         .setup(|app| {
