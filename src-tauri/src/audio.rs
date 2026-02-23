@@ -256,7 +256,48 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
     // Optimization: Pre-calculate inverse ratio to use multiplication instead of division
     let inv_ratio = 1.0 / ratio;
 
-    for i in 0..output_len {
+    // Calculate limit for safe "hot loop" where src_idx + 1 < input.len()
+    // i * inv_ratio < input.len() - 1
+    // i < (input.len() - 1) * ratio
+    let limit_safe = if input.len() > 1 {
+        ((input.len() - 1) as f64 * ratio).floor() as usize
+    } else {
+        0
+    };
+
+    let limit = std::cmp::min(limit_safe, output_len);
+
+    let mut out_ptr = output.as_mut_ptr();
+    let start_len = output.len();
+    // Move pointer to the end of current data (where we append)
+    unsafe {
+        out_ptr = out_ptr.add(start_len);
+    }
+
+    let mut src_pos = 0.0;
+
+    // Hot loop: vectorized, no bounds checks, pointer arithmetic
+    // SAFETY: limit ensures src_idx + 1 < input.len()
+    unsafe {
+        for _ in 0..limit {
+            let src_idx = src_pos as usize;
+            let frac = (src_pos - src_idx as f64) as f32;
+
+            let s1 = *input.get_unchecked(src_idx);
+            let s2 = *input.get_unchecked(src_idx + 1);
+            let sample = s1 * (1.0 - frac) + s2 * frac;
+
+            out_ptr.write(sample);
+            out_ptr = out_ptr.add(1);
+            src_pos += inv_ratio;
+        }
+
+        // Update length after hot loop
+        output.set_len(start_len + limit);
+    }
+
+    // Tail loop for boundary conditions
+    for i in limit..output_len {
         let src_pos = i as f64 * inv_ratio;
         let src_idx = src_pos as usize;
         let frac = (src_pos - src_idx as f64) as f32;
