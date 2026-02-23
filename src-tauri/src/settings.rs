@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 fn default_hold() -> String {
@@ -301,11 +301,27 @@ pub(crate) fn save_settings(settings: &Settings, base: &Path) -> Result<(), Stri
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| e.to_string())?;
 
     #[cfg(unix)]
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
-        .map_err(|e| e.to_string())?;
+    {
+        use std::io::Write;
+        let mut options = std::fs::OpenOptions::new();
+        options
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600);
+        let mut file = options.open(&path).map_err(|e| e.to_string())?;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| e.to_string())?;
+        file.write_all(json.as_bytes())
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(not(unix))]
+    {
+        std::fs::write(&path, json).map_err(|e| e.to_string())?;
+    }
 
     Ok(())
 }
