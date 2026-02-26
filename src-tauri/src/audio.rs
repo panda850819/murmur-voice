@@ -252,23 +252,45 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
 
     let output_len = (input.len() as f64 * ratio).ceil() as usize;
     output.reserve(output_len);
-
-    // Optimization: Pre-calculate inverse ratio to use multiplication instead of division
     let inv_ratio = 1.0 / ratio;
 
-    for i in 0..output_len {
+    // We need src_idx + 1 < input.len() => src_idx <= input.len() - 2
+    // Use saturating_sub(2) to be extremely safe against floating point errors
+    let safe_limit = ((input.len().saturating_sub(2)) as f64 * ratio).floor() as usize;
+    let limit = safe_limit.min(output_len);
+
+    // Hot loop
+    for i in 0..limit {
+        let src_pos = i as f64 * inv_ratio;
+        // Optimization: src_pos is always positive, cast is safe
+        let src_idx = src_pos as usize;
+        let frac = (src_pos - src_idx as f64) as f32;
+
+        unsafe {
+            let p1 = *input.get_unchecked(src_idx);
+            let p2 = *input.get_unchecked(src_idx + 1);
+            // Optimization: Algebraic simplification
+            // p1 * (1 - f) + p2 * f = p1 - p1*f + p2*f = p1 + f * (p2 - p1)
+            let sample = p1 + frac * (p2 - p1);
+            output.push(sample);
+        }
+    }
+
+    // Tail loop
+    for i in limit..output_len {
         let src_pos = i as f64 * inv_ratio;
         let src_idx = src_pos as usize;
         let frac = (src_pos - src_idx as f64) as f32;
 
         let sample = if src_idx + 1 < input.len() {
-            input[src_idx] * (1.0 - frac) + input[src_idx + 1] * frac
+            let p1 = input[src_idx];
+            let p2 = input[src_idx + 1];
+            p1 + frac * (p2 - p1)
         } else if src_idx < input.len() {
             input[src_idx]
         } else {
             0.0
         };
-
         output.push(sample);
     }
 }
