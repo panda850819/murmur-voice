@@ -429,7 +429,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         (llm::create_enhancer(&s), s.app_aware_style)
     };
 
-    eprintln!("[whisper raw] {}", raw_text);
+    log::debug!("[whisper raw] {}", raw_text);
 
     let text = if let Some(enhancer) = enhancer {
         if raw_text.is_empty() {
@@ -459,7 +459,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
 
             match enhancer.enhance(&raw_text, style) {
                 Ok(processed) => {
-                    eprintln!("[llm output] {}", processed);
+                    log::debug!("[llm output] {}", processed);
                     processed
                 }
                 Err(e) => {
