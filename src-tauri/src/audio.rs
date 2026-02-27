@@ -256,13 +256,42 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
     // Optimization: Pre-calculate inverse ratio to use multiplication instead of division
     let inv_ratio = 1.0 / ratio;
 
-    for i in 0..output_len {
+    // Safety limit calculation:
+    // We want to access input[src_idx] and input[src_idx + 1] without bounds checks.
+    // So src_idx + 1 must be < input.len().
+    // src_idx < input.len() - 1.
+    // Since src_idx = floor(i * inv_ratio), we need:
+    // floor(i * inv_ratio) < input.len() - 1
+    // i * inv_ratio < input.len() - 1
+    // i < (input.len() - 1) * ratio
+    let safe_limit = ((input.len().saturating_sub(2) as f64) * ratio).floor() as usize;
+    let safe_limit = safe_limit.min(output_len);
+
+    // Hot loop: Using unchecked access and simplified math
+    for i in 0..safe_limit {
+        let src_pos = i as f64 * inv_ratio;
+        let src_idx = src_pos as usize;
+        let frac = (src_pos - src_idx as f64) as f32;
+
+        // Safety: safe_limit ensures src_idx + 1 < input.len()
+        let p1 = unsafe { *input.get_unchecked(src_idx) };
+        let p2 = unsafe { *input.get_unchecked(src_idx + 1) };
+
+        // Optimization: p1 * (1 - frac) + p2 * frac = p1 + frac * (p2 - p1)
+        // Reduces 2 muls, 1 add, 1 sub -> 1 mul, 1 add, 1 sub
+        output.push(p1 + frac * (p2 - p1));
+    }
+
+    // Tail loop for boundary conditions
+    for i in safe_limit..output_len {
         let src_pos = i as f64 * inv_ratio;
         let src_idx = src_pos as usize;
         let frac = (src_pos - src_idx as f64) as f32;
 
         let sample = if src_idx + 1 < input.len() {
-            input[src_idx] * (1.0 - frac) + input[src_idx + 1] * frac
+            let p1 = input[src_idx];
+            let p2 = input[src_idx + 1];
+            p1 + frac * (p2 - p1)
         } else if src_idx < input.len() {
             input[src_idx]
         } else {
