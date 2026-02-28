@@ -36,7 +36,9 @@ pub(crate) fn foreground_app_bundle_id() -> Option<String> {
         // [nsString UTF8String]
         let sel_utf8 = sel_registerName(c"UTF8String".as_ptr());
         let msg_send_str: unsafe extern "C" fn(*mut Object, Sel) -> *const std::ffi::c_char =
-            std::mem::transmute(objc_msgSend as unsafe extern "C" fn(*mut Object, Sel) -> *mut Object);
+            std::mem::transmute(
+                objc_msgSend as unsafe extern "C" fn(*mut Object, Sel) -> *mut Object,
+            );
         let utf8_ptr: *const std::ffi::c_char = msg_send_str(ns_string, sel_utf8);
         if utf8_ptr.is_null() {
             return None;
@@ -233,8 +235,9 @@ pub(crate) fn is_microphone_authorized() -> bool {
         }
 
         let sel = sel_registerName(c"authorizationStatusForMediaType:".as_ptr());
-        let send: unsafe extern "C" fn(*const Object, Sel, CFTypeRef) -> i64 =
-            std::mem::transmute(objc_msgSend as unsafe extern "C" fn(*mut Object, Sel) -> *mut Object);
+        let send: unsafe extern "C" fn(*const Object, Sel, CFTypeRef) -> i64 = std::mem::transmute(
+            objc_msgSend as unsafe extern "C" fn(*mut Object, Sel) -> *mut Object,
+        );
         let status = send(class, sel, audio_type);
         // Don't CFRelease — audio_type is a framework constant, not an owned object
         log::info!("mic check: AVCaptureDevice authorizationStatus = {status}");

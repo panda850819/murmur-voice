@@ -407,7 +407,7 @@ mod tests {
         };
         let t = s.ptt_key_target();
         assert_eq!(t.modifier_mask, 0x20); // NX_DEVICELALTKEYMASK
-        assert_eq!(t.regular_key, 0x06);  // CGKeyCode for Z
+        assert_eq!(t.regular_key, 0x06); // CGKeyCode for Z
     }
 
     #[test]
@@ -431,7 +431,7 @@ mod tests {
         };
         let t = s.ptt_key_target();
         assert_eq!(t.modifier_mask, 0xA4); // VK_LMENU
-        assert_eq!(t.regular_key, 0x5A);   // VK_Z
+        assert_eq!(t.regular_key, 0x5A); // VK_Z
     }
 
     #[test]
@@ -451,7 +451,10 @@ mod tests {
             dictionary: "".to_string(),
             ..Settings::default()
         };
-        assert_eq!(s.whisper_initial_prompt(), "繁體中文語音轉錄，使用台灣正體中文。");
+        assert_eq!(
+            s.whisper_initial_prompt(),
+            "繁體中文語音轉錄，使用台灣正體中文。"
+        );
     }
 
     #[test]
@@ -461,7 +464,10 @@ mod tests {
             dictionary: "".to_string(),
             ..Settings::default()
         };
-        assert_eq!(s.whisper_initial_prompt(), "繁體中文語音轉錄，使用台灣正體中文。");
+        assert_eq!(
+            s.whisper_initial_prompt(),
+            "繁體中文語音轉錄，使用台灣正體中文。"
+        );
     }
 
     #[test]
@@ -491,6 +497,9 @@ mod tests {
             dictionary: "Hello World".to_string(),
             ..Settings::default()
         };
-        assert_eq!(s.whisper_initial_prompt(), "繁體中文語音轉錄，使用台灣正體中文。 Hello World");
+        assert_eq!(
+            s.whisper_initial_prompt(),
+            "繁體中文語音轉錄，使用台灣正體中文。 Hello World"
+        );
     }
 }
