@@ -256,13 +256,47 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
     // Optimization: Pre-calculate inverse ratio to use multiplication instead of division
     let inv_ratio = 1.0 / ratio;
 
-    for i in 0..output_len {
+    // Optimization: Split loop to avoid bounds checking in the hot path.
+    // safe_limit ensures that `src_idx + 1` never exceeds input.len() - 1,
+    // allowing safe unchecked access for interpolation.
+    let safe_limit = input.len().saturating_sub(1);
+    let mut i = 0;
+
+    // Hot loop (process most samples without bounds checks)
+    while i < output_len {
+        let src_pos = i as f64 * inv_ratio;
+        let src_idx = src_pos as usize;
+
+        if src_idx >= safe_limit {
+            break; // Transition to tail loop
+        }
+
+        let frac = (src_pos - src_idx as f64) as f32;
+
+        // SAFETY: The condition `src_idx < safe_limit` (where safe_limit = input.len() - 1)
+        // guarantees that src_idx + 1 < input.len(), so these unchecked accesses are strictly in bounds.
+        // Even if input.len() == 1, safe_limit is 0, and src_idx >= 0 will immediately break the loop.
+        let (p1, p2) = unsafe {
+            (*input.get_unchecked(src_idx), *input.get_unchecked(src_idx + 1))
+        };
+
+        // Algebraic simplification: p1 + (p2 - p1) * frac reduces multiplication count
+        let sample = p1 + (p2 - p1) * frac;
+
+        output.push(sample);
+        i += 1;
+    }
+
+    // Tail loop (process boundary samples safely)
+    while i < output_len {
         let src_pos = i as f64 * inv_ratio;
         let src_idx = src_pos as usize;
         let frac = (src_pos - src_idx as f64) as f32;
 
         let sample = if src_idx + 1 < input.len() {
-            input[src_idx] * (1.0 - frac) + input[src_idx + 1] * frac
+            let p1 = input[src_idx];
+            let p2 = input[src_idx + 1];
+            p1 + (p2 - p1) * frac
         } else if src_idx < input.len() {
             input[src_idx]
         } else {
@@ -270,6 +304,7 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
         };
 
         output.push(sample);
+        i += 1;
     }
 }
 
