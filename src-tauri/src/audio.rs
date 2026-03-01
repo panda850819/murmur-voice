@@ -15,6 +15,7 @@ const SILENCE_ENERGY_THRESHOLD: f32 = 1e-6;
 
 /// Opens the default audio input device and returns it with its default stream config.
 /// Returns `None` if no input device is available or its config cannot be queried.
+#[allow(dead_code)]
 pub(crate) fn open_default_input() -> Option<(cpal::Device, cpal::SupportedStreamConfig)> {
     let host = cpal::default_host();
     let device = host.default_input_device()?;
