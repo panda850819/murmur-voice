@@ -586,7 +586,7 @@ async fn download_model_cmd(app: tauri::AppHandle) -> Result<(), String> {
 
     // Prevent concurrent downloads (main window + onboarding can both trigger).
     // First caller wins; second caller silently returns Ok (it will receive progress events).
-    if murmur_state.downloading.swap(true, Ordering::SeqCst) {
+    if murmur_state.downloading.swap(true, Ordering::Acquire) {
         return Ok(());
     }
 
@@ -604,10 +604,13 @@ async fn download_model_cmd(app: tauri::AppHandle) -> Result<(), String> {
     })
     .await;
 
-    murmur_state.downloading.store(false, Ordering::SeqCst);
-    result.map_err(|e| e.to_string())?;
+    result.map_err(|e| {
+        murmur_state.downloading.store(false, Ordering::Release);
+        e.to_string()
+    })?;
 
     let _ = app.emit(events::MODEL_READY, ());
+    murmur_state.downloading.store(false, Ordering::Release);
 
     // Spawn background engine init (don't block the command)
     {
