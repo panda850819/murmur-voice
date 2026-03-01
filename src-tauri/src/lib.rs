@@ -58,6 +58,8 @@ pub(crate) struct MurmurState {
     main_visible: AtomicBool,
     /// Set when user manually shows window via tray; suppresses auto-hide.
     manual_show: AtomicBool,
+    /// Guard to prevent concurrent model downloads (main + onboarding can both trigger).
+    downloading: AtomicBool,
 }
 
 /// Signal that engine initialization is complete (success or failure).
@@ -581,10 +583,17 @@ fn is_model_ready(state: tauri::State<'_, MurmurState>) -> bool {
 #[tauri::command]
 async fn download_model_cmd(app: tauri::AppHandle) -> Result<(), String> {
     let murmur_state = app.state::<MurmurState>();
+
+    // Prevent concurrent downloads (main window + onboarding can both trigger).
+    // First caller wins; second caller silently returns Ok (it will receive progress events).
+    if murmur_state.downloading.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+
     let base = murmur_state.app_data_dir.clone();
 
     let app_clone = app.clone();
-    model::download_model(&base, &model::ModelConfig::default(), move |downloaded, total| {
+    let result = model::download_model(&base, &model::ModelConfig::default(), move |downloaded, total| {
         let _ = app_clone.emit(
             events::MODEL_DOWNLOAD_PROGRESS,
             serde_json::json!({
@@ -593,8 +602,10 @@ async fn download_model_cmd(app: tauri::AppHandle) -> Result<(), String> {
             }),
         );
     })
-    .await
-    .map_err(|e| e.to_string())?;
+    .await;
+
+    murmur_state.downloading.store(false, Ordering::SeqCst);
+    result.map_err(|e| e.to_string())?;
 
     let _ = app.emit(events::MODEL_READY, ());
 
@@ -902,6 +913,7 @@ pub fn run() {
                 preview_generation: AtomicU64::new(0),
                 main_visible: AtomicBool::new(false),
                 manual_show: AtomicBool::new(false),
+                downloading: AtomicBool::new(false),
             });
 
             // Create system tray with Settings + Show/Hide + Quit
