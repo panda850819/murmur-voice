@@ -70,7 +70,7 @@ function startRecording() {
   isRecording = true;
   recordingPhase = "modifier";
   capturedModifier = null;
-  invoke("pause_hotkey_listener").catch(() => {});
+  invoke(COMMANDS.PAUSE_HOTKEY_LISTENER).catch(() => {});
   const btn = el("ptt-record");
   btn.textContent = t("ptt.holdModifier");
   btn.classList.add("recording");
@@ -80,7 +80,7 @@ function stopRecording() {
   isRecording = false;
   recordingPhase = null;
   capturedModifier = null;
-  invoke("resume_hotkey_listener").catch(() => {});
+  invoke(COMMANDS.RESUME_HOTKEY_LISTENER).catch(() => {});
   const btn = el("ptt-record");
   btn.classList.remove("recording");
   btn.textContent = displayNameFor(currentPttKey);
@@ -237,7 +237,7 @@ function loadDictFromString(str) {
 window.addEventListener("DOMContentLoaded", async () => {
   // Load settings
   try {
-    const s = await invoke("get_settings");
+    const s = await invoke(COMMANDS.GET_SETTINGS);
     setPttKey(s.ptt_key);
     el("language").value = s.language;
     el("engine").value = s.engine;
@@ -355,7 +355,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     };
 
     try {
-      await invoke("save_settings", { newSettings });
+      await invoke(COMMANDS.SAVE_SETTINGS, { newSettings });
       showStatus(t("status.saved"));
       setTimeout(() => getCurrentWindow().close(), 500);
     } catch (e) {
@@ -369,7 +369,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     btn.textContent = t("update.checking");
     btn.disabled = true;
     try {
-      const result = await invoke("check_for_updates");
+      const result = await invoke(COMMANDS.CHECK_FOR_UPDATES);
       if (result.up_to_date) {
         btn.textContent = t("update.upToDate").replace("{version}", result.current_version);
         setTimeout(() => { btn.textContent = t("btn.checkUpdate"); btn.disabled = false; }, 3000);
@@ -378,7 +378,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         btn.classList.add("update-available");
         btn.disabled = false;
         btn.onclick = async () => {
-          await invoke("open_url", { url: result.release_url });
+          await invoke(COMMANDS.OPEN_URL, { url: result.release_url });
         };
       }
     } catch (e) {
@@ -390,12 +390,12 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Changelog
   el("btn-changelog").addEventListener("click", async () => {
-    await invoke("open_url", { url: "https://github.com/panda850819/murmur-voice/releases" });
+    await invoke(COMMANDS.OPEN_URL, { url: "https://github.com/panda850819/murmur-voice/releases" });
   });
 
   // Roadmap
   el("btn-roadmap").addEventListener("click", async () => {
-    await invoke("open_url", { url: "https://github.com/panda850819/murmur-voice/blob/main/ROADMAP.md" });
+    await invoke(COMMANDS.OPEN_URL, { url: "https://github.com/panda850819/murmur-voice/blob/main/ROADMAP.md" });
   });
 
   // Cancel

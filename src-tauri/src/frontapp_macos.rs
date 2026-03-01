@@ -192,70 +192,101 @@ unsafe fn cfstring_to_string(cfstr: CFStringRef) -> Option<String> {
     }
 }
 
-/// Checks if microphone permission is authorized via AVCaptureDevice.
-pub(crate) fn is_microphone_authorized() -> bool {
-    extern "C" {
-        fn dlopen(path: *const std::ffi::c_char, mode: i32) -> *const std::ffi::c_void;
-        fn dlsym(
-            handle: *const std::ffi::c_void,
-            symbol: *const std::ffi::c_char,
-        ) -> *const std::ffi::c_void;
-    }
-    const RTLD_LAZY: i32 = 0x1;
+/// Cached AVFoundation symbols loaded once via `dlopen`/`dlsym`.
+/// Avoids re-loading the framework on every `is_microphone_authorized()` call
+/// (which runs on a 3s polling loop during onboarding).
+struct AvFoundationSymbols {
+    av_capture_device_class: *const Object,
+    av_media_type_audio: CFTypeRef,
+}
 
-    unsafe {
-        // Explicitly load AVFoundation so AVCaptureDevice class is available
+// SAFETY: These are framework constants valid for the process lifetime.
+unsafe impl Send for AvFoundationSymbols {}
+unsafe impl Sync for AvFoundationSymbols {}
+
+static AV_FOUNDATION: std::sync::OnceLock<AvFoundationSymbols> = std::sync::OnceLock::new();
+
+fn load_av_foundation() -> Option<&'static AvFoundationSymbols> {
+    let syms = AV_FOUNDATION.get_or_init(|| unsafe {
+        let null_syms = AvFoundationSymbols {
+            av_capture_device_class: std::ptr::null(),
+            av_media_type_audio: std::ptr::null(),
+        };
+
         let handle = dlopen(
             c"/System/Library/Frameworks/AVFoundation.framework/AVFoundation".as_ptr(),
             RTLD_LAZY,
         );
         if handle.is_null() {
             log::warn!("mic check: failed to dlopen AVFoundation");
-            return false;
+            return null_syms;
         }
 
         let class = objc_getClass(c"AVCaptureDevice".as_ptr());
         if class.is_null() {
             log::warn!("mic check: AVCaptureDevice class not found");
-            return false;
+            return null_syms;
         }
 
-        // Get the actual AVMediaTypeAudio constant from the framework
         let av_media_type_audio_ptr = dlsym(handle, c"AVMediaTypeAudio".as_ptr());
         if av_media_type_audio_ptr.is_null() {
             log::warn!("mic check: AVMediaTypeAudio symbol not found");
-            return false;
+            return null_syms;
         }
         let audio_type: CFTypeRef = *(av_media_type_audio_ptr as *const CFTypeRef);
-        if audio_type.is_null() {
-            log::warn!("mic check: AVMediaTypeAudio is null");
-            return false;
-        }
 
+        AvFoundationSymbols {
+            av_capture_device_class: class,
+            av_media_type_audio: audio_type,
+        }
+    });
+
+    if syms.av_capture_device_class.is_null() {
+        None
+    } else {
+        Some(syms)
+    }
+}
+
+/// Checks microphone permission status via AVCaptureDevice.
+///
+/// Returns one of: "granted", "denied", "restricted", "not_determined", "unknown".
+pub(crate) fn is_microphone_authorized() -> &'static str {
+    let syms = match load_av_foundation() {
+        Some(s) => s,
+        None => return "unknown",
+    };
+
+    unsafe {
         let sel = sel_registerName(c"authorizationStatusForMediaType:".as_ptr());
         let send: unsafe extern "C" fn(*const Object, Sel, CFTypeRef) -> i64 =
             std::mem::transmute(objc_msgSend as unsafe extern "C" fn(*mut Object, Sel) -> *mut Object);
-        let status = send(class, sel, audio_type);
-        // Don't CFRelease — audio_type is a framework constant, not an owned object
+        let status = send(syms.av_capture_device_class, sel, syms.av_media_type_audio);
         log::info!("mic check: AVCaptureDevice authorizationStatus = {status}");
-        status == 3
+        match status {
+            0 => "not_determined",
+            1 => "restricted",
+            2 => "denied",
+            3 => "granted",
+            _ => "unknown",
+        }
     }
 }
 
 /// Requests microphone permission by briefly opening a Core Audio input stream.
 /// On macOS, this triggers the TCC permission dialog if status is notDetermined.
+/// No-op if permission is already granted or denied.
 pub(crate) fn request_microphone_access() {
-    use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+    if is_microphone_authorized() == "granted" {
+        return;
+    }
+
+    use cpal::traits::{DeviceTrait, StreamTrait};
 
     std::thread::spawn(|| {
-        let host = cpal::default_host();
-        let device = match host.default_input_device() {
+        let (device, config) = match crate::audio::open_default_input() {
             Some(d) => d,
             None => return,
-        };
-        let config = match device.default_input_config() {
-            Ok(c) => c,
-            Err(_) => return,
         };
         let stream = device.build_input_stream(
             &config.into(),
@@ -283,7 +314,14 @@ extern "C" {
     fn objc_getClass(name: *const std::ffi::c_char) -> *const Object;
     fn sel_registerName(name: *const std::ffi::c_char) -> Sel;
     fn objc_msgSend(obj: *mut Object, sel: Sel) -> *mut Object;
+    fn dlopen(path: *const std::ffi::c_char, mode: i32) -> *const std::ffi::c_void;
+    fn dlsym(
+        handle: *const std::ffi::c_void,
+        symbol: *const std::ffi::c_char,
+    ) -> *const std::ffi::c_void;
 }
+
+const RTLD_LAZY: i32 = 0x1;
 
 // --- Accessibility API FFI bindings ---
 

@@ -128,7 +128,7 @@ function showDictSuggestions(words) {
 
 async function addDictWord(word, chipEl) {
   try {
-    await invoke("add_dictionary_term", { term: word });
+    await invoke(COMMANDS.ADD_DICTIONARY_TERM, { term: word });
     addedWords.add(word.toLowerCase());
     chipEl.textContent = t("preview.dictAdded");
     chipEl.classList.add("added");
@@ -194,7 +194,7 @@ function scrollToBottom() {
 window.addEventListener("DOMContentLoaded", async () => {
   // Load locale
   try {
-    const s = await invoke("get_settings");
+    const s = await invoke(COMMANDS.GET_SETTINGS);
     currentLocale = s.ui_locale || "en";
   } catch (_) {}
 
@@ -203,13 +203,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     const btn = copyBtn();
     const text = previewText().textContent;
     try {
-      await invoke("copy_to_clipboard", { text });
+      await invoke(COMMANDS.COPY_TO_CLIPBOARD, { text });
       btn.textContent = t("preview.copied");
       btn.classList.add("copied");
       setTimeout(() => {
         btn.textContent = t("preview.copy");
         btn.classList.remove("copied");
-        invoke("hide_preview").catch(() => {});
+        invoke(COMMANDS.HIDE_PREVIEW).catch(() => {});
       }, 1500);
     } catch (_) {
       // silently fail
@@ -226,7 +226,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
 
     try {
-      await invoke("add_dictionary_terms", { terms: words });
+      await invoke(COMMANDS.ADD_DICTIONARY_TERMS, { terms: words });
       chips.forEach((chip, i) => {
         addedWords.add(words[i].toLowerCase());
         chip.textContent = t("preview.dictAdded");
@@ -266,7 +266,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (currentMode === TRANSCRIPTION_MODES.PASTED) {
       autoHideTimer = setTimeout(async () => {
         try {
-          await invoke("hide_overlay_windows");
+          await invoke(COMMANDS.HIDE_OVERLAY_WINDOWS);
         } catch (_) {}
       }, 3000);
     }
@@ -330,7 +330,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         const delay = mode === TRANSCRIPTION_MODES.PASTED ? 3000 : 30000;
         autoHideTimer = setTimeout(async () => {
           try {
-            await invoke("hide_overlay_windows");
+            await invoke(COMMANDS.HIDE_OVERLAY_WINDOWS);
           } catch (_) {}
         }, delay);
       }

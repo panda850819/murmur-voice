@@ -4,7 +4,7 @@
 TBD - created by archiving change build-mvp-voice-to-text. Update Purpose after archive.
 ## Requirements
 ### Requirement: Microphone capture
-The system SHALL capture audio from the default input device using cpal and produce 16kHz mono f32 samples suitable for Whisper inference.
+The system SHALL capture audio from the default input device using cpal and produce 16kHz mono f32 samples suitable for Whisper inference. Device discovery SHALL use the shared `open_default_input()` helper.
 
 #### Scenario: Record audio at native sample rate and resample
 - **WHEN** recording is started on a device with sample rate other than 16kHz
@@ -28,4 +28,15 @@ The system SHALL support start and stop operations controlled by an external sig
 #### Scenario: Short recording protection
 - **WHEN** recording duration is less than 0.2 seconds (fewer than ~3200 samples at 16kHz)
 - **THEN** the system returns an empty sample buffer to avoid transcription of noise
+
+### Requirement: Default input device helper
+The system SHALL provide a `open_default_input()` function in the audio module that returns the default cpal input device and its supported stream config. This helper SHALL be used by both the audio recorder and the microphone permission request trigger.
+
+#### Scenario: Device available
+- **WHEN** `open_default_input` is called and a default input device exists
+- **THEN** it returns the device and its default input config
+
+#### Scenario: No device available
+- **WHEN** `open_default_input` is called and no default input device exists
+- **THEN** it returns None
 

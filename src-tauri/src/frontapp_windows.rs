@@ -133,8 +133,8 @@ fn explorer_has_input_focus() -> bool {
 }
 
 /// Windows does not require per-app microphone permission grants.
-pub(crate) fn is_microphone_authorized() -> bool {
-    true
+pub(crate) fn is_microphone_authorized() -> &'static str {
+    "granted"
 }
 
 /// No-op on Windows — microphone access doesn't need explicit permission request.

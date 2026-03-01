@@ -27,7 +27,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Load locale
   try {
-    const s = await invoke("get_settings");
+    const s = await invoke(COMMANDS.GET_SETTINGS);
     currentLocale = s.ui_locale || "en";
   } catch (_) {}
 
@@ -135,20 +135,20 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Right-click to open settings
   document.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    invoke("open_settings");
+    invoke(COMMANDS.OPEN_SETTINGS);
   });
 
   // Now check model status and trigger download if needed.
   let modelReady = false;
   try {
-    modelReady = await invoke("is_model_ready");
+    modelReady = await invoke(COMMANDS.IS_MODEL_READY);
   } catch (_) {}
 
   if (!modelReady) {
     progressContainer.classList.remove("hidden");
     setStatus(null, t("state.downloadingModel").replace(" {pct}%", ""));
     // Fire and forget — progress updates come via events above.
-    invoke("download_model_cmd").catch((err) => {
+    invoke(COMMANDS.DOWNLOAD_MODEL_CMD).catch((err) => {
       setStatus("error", t("state.downloadFailed"));
       transcription.textContent = String(err);
     });
@@ -158,7 +158,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Check Accessibility permission (macOS: required for hotkey)
   try {
-    const accessible = await invoke("check_accessibility");
+    const accessible = await invoke(COMMANDS.CHECK_ACCESSIBILITY);
     if (!accessible) {
       setStatus("error", t("state.accessibilityError"));
       transcription.textContent = t("state.accessibilityHint");

@@ -1,7 +1,7 @@
 use thiserror::Error;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-const MIN_SAMPLES: usize = 16_000; // 1s at 16kHz — shorter clips produce hallucinations
+use crate::audio;
 
 fn calculate_threads(available: usize) -> i32 {
     if available <= 4 {
@@ -84,7 +84,7 @@ impl TranscriptionEngine {
     }
 
     pub(crate) fn transcribe(&self, samples: &[f32], language: &str, initial_prompt: &str) -> Result<String, WhisperError> {
-        if samples.len() < MIN_SAMPLES {
+        if !audio::is_audio_usable(samples) {
             return Ok(String::new());
         }
 
@@ -92,12 +92,6 @@ impl TranscriptionEngine {
             .ctx
             .create_state()
             .map_err(|e| WhisperError::StateCreate(e.to_string()))?;
-
-        // Check if audio has enough energy (not just silence)
-        let energy: f32 = samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32;
-        if energy < 1e-6 {
-            return Ok(String::new());
-        }
 
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
         params.set_n_threads(optimal_threads());

@@ -66,7 +66,7 @@ function startPttRecording() {
   isRecording = true;
   recordingPhase = "modifier";
   capturedModifier = null;
-  invoke("pause_hotkey_listener").catch(() => {});
+  invoke(COMMANDS.PAUSE_HOTKEY_LISTENER).catch(() => {});
   const btn = el("onboard-ptt-record");
   btn.textContent = t("ptt.holdModifier");
   btn.classList.add("recording");
@@ -76,7 +76,7 @@ function stopPttRecording() {
   isRecording = false;
   recordingPhase = null;
   capturedModifier = null;
-  invoke("resume_hotkey_listener").catch(() => {});
+  invoke(COMMANDS.RESUME_HOTKEY_LISTENER).catch(() => {});
   const btn = el("onboard-ptt-record");
   btn.classList.remove("recording");
   btn.textContent = pttDisplayName(pttKey);
@@ -130,23 +130,32 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Poll permission statuses
   let micGranted = false;
+  let micFinal = false; // true when denied/restricted — stop polling
   let accGranted = false;
 
   async function checkMicStatus() {
+    let micStatus;
     try {
-      micGranted = await invoke("check_microphone");
+      micStatus = await invoke(COMMANDS.CHECK_MICROPHONE);
     } catch (_) {
-      micGranted = false;
+      micStatus = "unknown";
     }
+    micGranted = micStatus === "granted";
+    micFinal = micStatus === "denied" || micStatus === "restricted";
+
     const badge = el("mic-status");
     if (badge) {
       badge.textContent = micGranted ? "\u2705" : "\u274C";
+    }
+    const deniedMsg = el("mic-denied-msg");
+    if (deniedMsg) {
+      deniedMsg.classList.toggle("hidden", !micFinal);
     }
   }
 
   async function checkAccStatus() {
     try {
-      accGranted = await invoke("check_accessibility");
+      accGranted = await invoke(COMMANDS.CHECK_ACCESSIBILITY);
     } catch (_) {
       accGranted = false;
     }
@@ -156,15 +165,23 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
+  // Open System Settings for Microphone privacy pane
+  const btnOpenMicSettings = el("btn-open-mic-settings");
+  if (btnOpenMicSettings) {
+    btnOpenMicSettings.addEventListener("click", () => {
+      invoke(COMMANDS.OPEN_URL, { url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone" }).catch(() => {});
+    });
+  }
+
   // Trigger macOS mic permission dialog (no-op if already granted/denied)
-  invoke("request_microphone").catch(() => {});
+  invoke(COMMANDS.REQUEST_MICROPHONE).catch(() => {});
 
   await checkMicStatus();
   await checkAccStatus();
   const permPoll = setInterval(async () => {
-    if (!micGranted) await checkMicStatus();
+    if (!micGranted && !micFinal) await checkMicStatus();
     if (!accGranted) await checkAccStatus();
-    if (micGranted && accGranted) clearInterval(permPoll);
+    if ((micGranted || micFinal) && accGranted) clearInterval(permPoll);
   }, 3000);
 
   // Step 3: Engine choice
@@ -192,7 +209,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   // Step 4: Model download
-  const modelReady = await invoke("is_model_ready");
+  const modelReady = await invoke(COMMANDS.IS_MODEL_READY);
   if (modelReady) {
     el("btn-download").classList.add("hidden");
     el("btn-step4-next").classList.remove("hidden");
@@ -204,7 +221,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     el("model-progress-wrap").classList.remove("hidden");
 
     try {
-      await invoke("download_model_cmd");
+      await invoke(COMMANDS.DOWNLOAD_MODEL_CMD);
       el("model-progress-wrap").classList.add("hidden");
       el("btn-download").classList.add("hidden");
       el("btn-step4-next").classList.remove("hidden");
@@ -268,7 +285,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   el("btn-done").addEventListener("click", async () => {
     el("btn-done").disabled = true;
     try {
-      const settings = await invoke("get_settings");
+      const settings = await invoke(COMMANDS.GET_SETTINGS);
       settings.ptt_key = pttKey;
       settings.ui_locale = chosenLocale;
       settings.engine = chosenEngine;
@@ -276,8 +293,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         settings.groq_api_key = el("onboard-groq-key").value.trim();
       }
       settings.onboarding_complete = true;
-      await invoke("save_settings", { newSettings: settings });
-      await invoke("complete_onboarding");
+      await invoke(COMMANDS.SAVE_SETTINGS, { newSettings: settings });
+      await invoke(COMMANDS.COMPLETE_ONBOARDING);
     } catch (e) {
       el("btn-done").disabled = false;
     }

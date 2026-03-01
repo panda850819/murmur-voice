@@ -1,5 +1,6 @@
 mod audio;
 mod clipboard;
+mod events;
 mod frontapp;
 mod hotkey;
 mod llm;
@@ -84,7 +85,7 @@ fn is_accessibility_trusted() -> bool {
     true
 }
 
-fn is_microphone_authorized() -> bool {
+fn is_microphone_authorized() -> &'static str {
     frontapp::is_microphone_authorized()
 }
 
@@ -129,6 +130,11 @@ fn hide_preview_window(app: &tauri::AppHandle) {
     }
 }
 
+fn reset_to_idle(state: &MurmurState, app: &tauri::AppHandle) {
+    let _ = state.app_state.transition(state::RecordingState::Idle);
+    let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_IDLE);
+}
+
 fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<MurmurState>();
 
@@ -144,13 +150,12 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
         .app_state
         .transition(state::RecordingState::Starting)
         .map_err(|e| e.to_string())?;
-    let _ = app.emit("recording_state_changed", "starting");
+    let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_STARTING);
 
     let mut recorder = audio::AudioRecorder::new();
     if let Err(e) = recorder.start() {
-        let _ = state.app_state.transition(state::RecordingState::Idle);
-        let _ = app.emit("recording_state_changed", "idle");
-        let _ = app.emit("recording_error", e.to_string());
+        reset_to_idle(&state, app);
+        let _ = app.emit(events::RECORDING_ERROR, e.to_string());
         hide_main_window(app);
         state.main_visible.store(false, Ordering::SeqCst);
         hide_preview_window(app);
@@ -166,7 +171,7 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
     let _ = state
         .app_state
         .transition(state::RecordingState::Recording);
-    let _ = app.emit("recording_state_changed", "recording");
+    let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_RECORDING);
 
     // Auto-stop after 5 minutes in toggle mode
     let mode = state
@@ -254,7 +259,7 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
                 }
 
                 if !text.is_empty() {
-                    let _ = app_clone.emit("partial_transcription", &text);
+                    let _ = app_clone.emit(events::PARTIAL_TRANSCRIPTION, &text);
                 }
 
                 std::thread::sleep(std::time::Duration::from_secs(2));
@@ -284,7 +289,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         .app_state
         .transition(state::RecordingState::Stopping)
         .map_err(|e| e.to_string())?;
-    let _ = app.emit("recording_state_changed", "stopping");
+    let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_STOPPING);
 
     let samples = {
         let mut recorder_lock = state
@@ -298,8 +303,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
     };
 
     if samples.is_empty() {
-        let _ = state.app_state.transition(state::RecordingState::Idle);
-        let _ = app.emit("recording_state_changed", "idle");
+        reset_to_idle(&state, app);
         hide_main_window(app);
         state.main_visible.store(false, Ordering::SeqCst);
         hide_preview_window(app);
@@ -309,7 +313,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
     let _ = state
         .app_state
         .transition(state::RecordingState::Transcribing);
-    let _ = app.emit("recording_state_changed", "transcribing");
+    let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_TRANSCRIBING);
 
     // Emit foreground app info for the frontend (preview window + main bar badge)
     {
@@ -324,7 +328,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
                 .map(|bid| (frontapp::display_name_for_app(bid), frontapp::style_for_app(bid)))
                 .unwrap_or(("Unknown", "default"));
             let _ = app.emit(
-                "foreground_app_info",
+                events::FOREGROUND_APP_INFO,
                 serde_json::json!({ "name": name, "style": style }),
             );
         }
@@ -342,18 +346,8 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         .unwrap_or_else(|_| ("local".to_string(), "auto".to_string(), String::new(), String::new()));
 
     // Anti-hallucination: skip if audio is too short or silent (applies to all engines)
-    const MIN_TRANSCRIBE_SAMPLES: usize = 16_000; // 1s at 16kHz
-    if samples.len() < MIN_TRANSCRIBE_SAMPLES {
-        log::info!("audio too short ({} samples), skipping transcription", samples.len());
-        let _ = state.app_state.transition(state::RecordingState::Idle);
-        let _ = app.emit("recording_state_changed", "idle");
-        return Ok(String::new());
-    }
-    let energy: f32 = samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32;
-    if energy < 1e-6 {
-        log::info!("audio energy too low ({energy:.2e}), skipping transcription");
-        let _ = state.app_state.transition(state::RecordingState::Idle);
-        let _ = app.emit("recording_state_changed", "idle");
+    if !audio::is_audio_usable(&samples) {
+        reset_to_idle(&state, app);
         return Ok(String::new());
     }
 
@@ -413,7 +407,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
     };
 
     let _ = app.emit(
-        "transcription_engine_info",
+        events::TRANSCRIPTION_ENGINE_INFO,
         serde_json::json!({
             "engine": &engine_type,
             "local": engine_type != "groq",
@@ -438,10 +432,10 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
             let _ = state
                 .app_state
                 .transition(state::RecordingState::Processing);
-            let _ = app.emit("recording_state_changed", "processing");
+            let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_PROCESSING);
 
             let _ = app.emit(
-                "enhancer_info",
+                events::ENHANCER_INFO,
                 serde_json::json!({
                     "name": enhancer.name(),
                     "local": enhancer.is_local(),
@@ -465,7 +459,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
                 Err(e) => {
                     log::error!("LLM post-processing failed: {}", e);
                     let _ = app.emit(
-                        "recording_error",
+                        events::RECORDING_ERROR,
                         format!("LLM processing failed, using raw text: {e}"),
                     );
                     raw_text
@@ -486,26 +480,25 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         if has_input {
             // Auto-paste mode: save clipboard → paste → restore
             if let Err(e) = clipboard::insert_text(&text) {
-                let _ = app.emit("recording_error", format!("clipboard error: {e}"));
+                let _ = app.emit(events::RECORDING_ERROR, format!("clipboard error: {e}"));
                 log::error!("failed to insert text: {}", e);
             }
-            "pasted"
+            events::MODE_PASTED
         } else {
             // Clipboard-only mode: just copy, no paste simulation
             if let Err(e) = clipboard::copy_only(&text) {
-                let _ = app.emit("recording_error", format!("clipboard error: {e}"));
+                let _ = app.emit(events::RECORDING_ERROR, format!("clipboard error: {e}"));
                 log::error!("failed to copy text: {}", e);
             }
-            "clipboard"
+            events::MODE_CLIPBOARD
         }
     } else {
-        "pasted" // empty text, doesn't matter
+        events::MODE_PASTED // empty text, doesn't matter
     };
 
-    let _ = state.app_state.transition(state::RecordingState::Idle);
-    let _ = app.emit("recording_state_changed", "idle");
+    reset_to_idle(&state, app);
     let _ = app.emit(
-        "transcription_complete",
+        events::TRANSCRIPTION_COMPLETE,
         serde_json::json!({ "text": text, "mode": output_mode }),
     );
 
@@ -593,7 +586,7 @@ async fn download_model_cmd(app: tauri::AppHandle) -> Result<(), String> {
     let app_clone = app.clone();
     model::download_model(&base, &model::ModelConfig::default(), move |downloaded, total| {
         let _ = app_clone.emit(
-            "model_download_progress",
+            events::MODEL_DOWNLOAD_PROGRESS,
             serde_json::json!({
                 "downloaded": downloaded,
                 "total": total,
@@ -603,7 +596,7 @@ async fn download_model_cmd(app: tauri::AppHandle) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
 
-    let _ = app.emit("model_ready", ());
+    let _ = app.emit(events::MODEL_READY, ());
 
     // Spawn background engine init (don't block the command)
     {
@@ -673,7 +666,7 @@ fn save_settings(
 
     // Apply window opacity
     if let Some(window) = app.get_webview_window("main") {
-        let _ = app.emit("opacity_changed", new_settings.window_opacity);
+        let _ = app.emit(events::OPACITY_CHANGED, new_settings.window_opacity);
         let _ = window.set_always_on_top(true);
     }
 
@@ -727,8 +720,8 @@ fn check_accessibility() -> bool {
 }
 
 #[tauri::command]
-fn check_microphone() -> bool {
-    is_microphone_authorized()
+fn check_microphone() -> String {
+    is_microphone_authorized().to_string()
 }
 
 #[tauri::command]
@@ -1076,13 +1069,13 @@ pub fn run() {
                 let mut last_toggle: Option<Instant> = None;
                 while let Ok(event) = receiver.recv() {
                     if event == hotkey::HotkeyEvent::EventTapFailed {
-                        let _ = app_handle.emit("accessibility_error", ());
+                        let _ = app_handle.emit(events::ACCESSIBILITY_ERROR, ());
                         // Poll until Accessibility is granted, then retry
                         loop {
                             std::thread::sleep(std::time::Duration::from_secs(3));
                             if is_accessibility_trusted() {
                                 hotkey::start_listener(retry_sender.clone());
-                                let _ = app_handle.emit("accessibility_granted", ());
+                                let _ = app_handle.emit(events::ACCESSIBILITY_GRANTED, ());
                                 break;
                             }
                         }
@@ -1117,13 +1110,9 @@ pub fn run() {
                                         is_recording = false;
                                         if let Err(e) = do_stop_recording(&app_handle) {
                                             log::error!("failed to stop recording: {}", e);
-                                            let _ = murmur_state
-                                                .app_state
-                                                .transition(state::RecordingState::Idle);
+                                            reset_to_idle(&murmur_state, &app_handle);
                                             let _ = app_handle
-                                                .emit("recording_state_changed", "idle");
-                                            let _ = app_handle
-                                                .emit("recording_error", e.to_string());
+                                                .emit(events::RECORDING_ERROR, e.to_string());
                                             hide_preview_window(&app_handle);
                                             hide_main_window(&app_handle);
                                         }
@@ -1171,11 +1160,8 @@ pub fn run() {
                             if let Err(e) = do_stop_recording(&app_handle) {
                                 log::error!("failed to stop recording: {}", e);
                                 let murmur_state = app_handle.state::<MurmurState>();
-                                let _ = murmur_state
-                                    .app_state
-                                    .transition(state::RecordingState::Idle);
-                                let _ = app_handle.emit("recording_state_changed", "idle");
-                                let _ = app_handle.emit("recording_error", e.to_string());
+                                reset_to_idle(&murmur_state, &app_handle);
+                                let _ = app_handle.emit(events::RECORDING_ERROR, e.to_string());
                                 hide_preview_window(&app_handle);
                                 hide_main_window(&app_handle);
                             }
@@ -1204,11 +1190,8 @@ pub fn run() {
                             }
 
                             is_recording = false;
-                            let _ = murmur_state
-                                .app_state
-                                .transition(state::RecordingState::Idle);
-                            let _ = app_handle.emit("recording_state_changed", "idle");
-                            let _ = app_handle.emit("recording_cancelled", ());
+                            reset_to_idle(&murmur_state, &app_handle);
+                            let _ = app_handle.emit(events::RECORDING_CANCELLED, ());
 
                             // Hide windows after 2-second delay
                             let app_hide = app_handle.clone();

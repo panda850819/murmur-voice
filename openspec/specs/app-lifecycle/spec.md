@@ -2,7 +2,6 @@
 
 ## Purpose
 Manages the application lifecycle: state machine, window visibility, system tray, hotkey orchestration, and frontend event communication.
-
 ## Requirements
 ### Requirement: Application state machine
 The system SHALL maintain a state machine with transitions: Idle -> Starting -> Recording -> Stopping -> Transcribing -> Idle. Any state MAY transition to Idle on error.
@@ -62,11 +61,11 @@ The system SHALL display a 420x48 transparent, always-on-top window without titl
 - **THEN** the auto-hide timer does not fire until the next recording cycle
 
 ### Requirement: Frontend state events
-The system SHALL emit events to the frontend: recording_state_changed, transcription_complete, model_download_progress, model_ready, foreground_app_info, recording_cancelled.
+The system SHALL emit events to the frontend using constants from the `events` module: recording_state_changed, transcription_complete, model_download_progress, model_ready, foreground_app_info, recording_cancelled. The system SHALL provide a `reset_to_idle` helper that transitions the state machine to Idle and emits the recording_state_changed event with the idle state constant.
 
 #### Scenario: State change notification
 - **WHEN** the recording state changes
-- **THEN** the system emits recording_state_changed with the new state name
+- **THEN** the system emits recording_state_changed with the new state name using event constants
 
 #### Scenario: Transcription result notification
 - **WHEN** transcription completes with non-empty text
@@ -75,6 +74,10 @@ The system SHALL emit events to the frontend: recording_state_changed, transcrip
 #### Scenario: Foreground app notification
 - **WHEN** transcription begins
 - **THEN** the system emits foreground_app_info with the detected app name and style
+
+#### Scenario: Idle reset via helper
+- **WHEN** the system needs to reset to idle state (error recovery, empty audio, silent audio, normal completion)
+- **THEN** the system calls `reset_to_idle` which atomically transitions state and emits the event
 
 ### Requirement: Hotkey-to-action orchestration
 The system SHALL connect hotkey events to recording and transcription actions: pressed starts recording, released stops recording and triggers transcription followed by text insertion. The system SHALL hide both main and preview windows after the recording flow completes. The window visibility lifecycle is: hidden -> show on recording start -> visible during recording/transcription/processing -> auto-hide 3 seconds after completion.
@@ -94,3 +97,23 @@ The system SHALL connect hotkey events to recording and transcription actions: p
 #### Scenario: Error during recording hides windows
 - **WHEN** an error occurs during recording or transcription
 - **THEN** both main and preview windows hide immediately after the error is displayed (3 seconds)
+
+### Requirement: Microphone permission check
+The system SHALL expose a `check_microphone` Tauri command that returns the permission status as a string: "granted", "denied", "restricted", "not_determined", or "unknown". On Windows, the command SHALL always return "granted".
+
+#### Scenario: Microphone authorized
+- **WHEN** the user has granted microphone permission
+- **THEN** `check_microphone` returns "granted"
+
+#### Scenario: Microphone denied
+- **WHEN** the user has denied microphone permission
+- **THEN** `check_microphone` returns "denied"
+
+#### Scenario: Microphone not yet determined
+- **WHEN** the user has not yet been prompted for microphone permission
+- **THEN** `check_microphone` returns "not_determined"
+
+#### Scenario: Onboarding stops polling on denial
+- **WHEN** the onboarding permission check receives "denied" or "restricted"
+- **THEN** the frontend stops polling for microphone permission and shows guidance to open System Settings
+

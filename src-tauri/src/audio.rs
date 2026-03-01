@@ -7,6 +7,38 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 const TARGET_SAMPLE_RATE: u32 = 16_000;
 const MIN_SAMPLES: usize = 3_200; // 0.2s at 16kHz
 
+/// Minimum sample count for transcription (1s at 16kHz). Shorter clips produce hallucinations.
+pub(crate) const MIN_TRANSCRIBE_SAMPLES: usize = 16_000;
+
+/// Energy threshold below which audio is considered silent.
+const SILENCE_ENERGY_THRESHOLD: f32 = 1e-6;
+
+/// Opens the default audio input device and returns it with its default stream config.
+/// Returns `None` if no input device is available or its config cannot be queried.
+pub(crate) fn open_default_input() -> Option<(cpal::Device, cpal::SupportedStreamConfig)> {
+    let host = cpal::default_host();
+    let device = host.default_input_device()?;
+    let config = device.default_input_config().ok()?;
+    Some((device, config))
+}
+
+/// Returns true if the audio buffer has enough data and energy for transcription.
+/// Used to gate both local Whisper and cloud (Groq) engines.
+pub(crate) fn is_audio_usable(samples: &[f32]) -> bool {
+    if samples.len() < MIN_TRANSCRIBE_SAMPLES {
+        log::info!("audio too short ({} samples), skipping transcription", samples.len());
+        return false;
+    }
+    let step = (samples.len() / 1000).max(1);
+    let count = samples.len() / step;
+    let energy: f32 = samples.iter().step_by(step).map(|s| s * s).sum::<f32>() / count as f32;
+    if energy < SILENCE_ENERGY_THRESHOLD {
+        log::info!("audio energy too low ({energy:.2e}), skipping transcription");
+        return false;
+    }
+    true
+}
+
 #[derive(Debug, Error)]
 pub(crate) enum AudioError {
     #[error("no input device available")]
@@ -58,6 +90,7 @@ impl AudioRecorder {
                 .default_input_device()
                 .ok_or(AudioError::NoInputDevice)?;
 
+            // Select best config: prefer mono F32, fallback to any F32, then any format
             let supported_config = device
                 .supported_input_configs()
                 .map_err(|e| AudioError::NoSupportedConfig(e.to_string()))?
@@ -79,7 +112,7 @@ impl AudioRecorder {
             let device_rate = if min_rate <= TARGET_SAMPLE_RATE && TARGET_SAMPLE_RATE <= max_rate {
                 TARGET_SAMPLE_RATE
             } else {
-                supported_config.max_sample_rate().0
+                max_rate
             };
 
             let channels = supported_config.channels();
