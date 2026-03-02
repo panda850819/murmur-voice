@@ -290,20 +290,26 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
     // Optimization: Pre-calculate inverse ratio to use multiplication instead of division
     let inv_ratio = 1.0 / ratio;
 
+    // Optimization: Calculate the safe limit for the hot loop where src_idx + 1 is guaranteed to be < input.len()
+    let safe_limit = input.len().saturating_sub(1);
+
     for i in 0..output_len {
         let src_pos = i as f64 * inv_ratio;
         let src_idx = src_pos as usize;
         let frac = (src_pos - src_idx as f64) as f32;
 
-        let sample = if src_idx + 1 < input.len() {
-            input[src_idx] * (1.0 - frac) + input[src_idx + 1] * frac
+        if src_idx < safe_limit {
+            // Hot loop - safe access, and using algebraic simplification to reduce operations.
+            // p1 * (1 - frac) + p2 * frac = p1 + (p2 - p1) * frac
+            let p1 = input[src_idx];
+            let p2 = input[src_idx + 1];
+            output.push(p1 + (p2 - p1) * frac);
         } else if src_idx < input.len() {
-            input[src_idx]
+            // Tail logic for the very last sample where src_idx + 1 is out of bounds
+            output.push(input[src_idx]);
         } else {
-            0.0
-        };
-
-        output.push(sample);
+            output.push(0.0);
+        }
     }
 }
 
