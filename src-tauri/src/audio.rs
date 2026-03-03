@@ -290,13 +290,46 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
     // Optimization: Pre-calculate inverse ratio to use multiplication instead of division
     let inv_ratio = 1.0 / ratio;
 
-    for i in 0..output_len {
+    // Optimization: Hot loop limit to prevent bounds checking in the hot path
+    // We can safely read src_idx and src_idx + 1 as long as src_idx < input.len() - 1
+    let safe_limit = input.len().saturating_sub(1);
+
+    let mut i = 0;
+
+    // Hot loop
+    while i < output_len {
+        let src_pos = i as f64 * inv_ratio;
+        let src_idx = src_pos as usize;
+
+        if src_idx >= safe_limit {
+            break; // Tail loop will handle boundaries
+        }
+
+        let frac = (src_pos - src_idx as f64) as f32;
+
+        // Safety: We verified src_idx < safe_limit = input.len() - 1,
+        // so src_idx and src_idx + 1 are both strictly < input.len().
+        let p1 = unsafe { *input.get_unchecked(src_idx) };
+        let p2 = unsafe { *input.get_unchecked(src_idx + 1) };
+
+        // Optimization: Algebraic simplification reduces multiplications from 2 to 1:
+        // p1 * (1.0 - frac) + p2 * frac -> p1 - p1 * frac + p2 * frac -> p1 + (p2 - p1) * frac
+        let sample = p1 + (p2 - p1) * frac;
+
+        output.push(sample);
+        i += 1;
+    }
+
+    // Tail loop for boundaries
+    while i < output_len {
         let src_pos = i as f64 * inv_ratio;
         let src_idx = src_pos as usize;
         let frac = (src_pos - src_idx as f64) as f32;
 
         let sample = if src_idx + 1 < input.len() {
-            input[src_idx] * (1.0 - frac) + input[src_idx + 1] * frac
+            let p1 = input[src_idx];
+            let p2 = input[src_idx + 1];
+            p1 + (p2 - p1) * frac
         } else if src_idx < input.len() {
             input[src_idx]
         } else {
@@ -304,6 +337,7 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
         };
 
         output.push(sample);
+        i += 1;
     }
 }
 
