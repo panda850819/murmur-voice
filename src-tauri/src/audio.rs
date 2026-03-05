@@ -290,20 +290,32 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
     // Optimization: Pre-calculate inverse ratio to use multiplication instead of division
     let inv_ratio = 1.0 / ratio;
 
+    // Optimization: split-loop to bypass bounds checking in hot path
+    let safe_limit = input.len().saturating_sub(1);
+
     for i in 0..output_len {
         let src_pos = i as f64 * inv_ratio;
         let src_idx = src_pos as usize;
         let frac = (src_pos - src_idx as f64) as f32;
 
-        let sample = if src_idx + 1 < input.len() {
-            input[src_idx] * (1.0 - frac) + input[src_idx + 1] * frac
-        } else if src_idx < input.len() {
-            input[src_idx]
-        } else {
-            0.0
-        };
+        if src_idx < safe_limit {
+            // SAFETY: src_idx < input.len() - 1, so src_idx and src_idx+1 are always valid
+            let p1 = unsafe { *input.get_unchecked(src_idx) };
+            let p2 = unsafe { *input.get_unchecked(src_idx + 1) };
 
-        output.push(sample);
+            // Optimization: algebraically simplified lerp saves 1 multiplication
+            let sample = p1 + (p2 - p1) * frac;
+            output.push(sample);
+        } else {
+            let sample = if src_idx + 1 < input.len() {
+                input[src_idx] + (input[src_idx + 1] - input[src_idx]) * frac
+            } else if src_idx < input.len() {
+                input[src_idx]
+            } else {
+                0.0
+            };
+            output.push(sample);
+        }
     }
 }
 
