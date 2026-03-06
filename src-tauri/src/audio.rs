@@ -290,13 +290,37 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
     // Optimization: Pre-calculate inverse ratio to use multiplication instead of division
     let inv_ratio = 1.0 / ratio;
 
-    for i in 0..output_len {
+    // Split loop optimization: Find limit up to which we can safely access input[src_idx + 1]
+    let safe_output_len = if input.len() > 1 {
+        let safe_limit = ((input.len() - 1) as f64 * ratio).floor() as usize;
+        safe_limit.min(output_len)
+    } else {
+        0
+    };
+
+    // Hot loop: we are guaranteed that src_idx + 1 < input.len()
+    for i in 0..safe_output_len {
+        let src_pos = i as f64 * inv_ratio;
+        let src_idx = src_pos as usize;
+        let frac = (src_pos - src_idx as f64) as f32;
+
+        // Optimization: avoid bounds checks on the hot path
+        // Optimization: algebraically simplified interpolation: p1 + (p2 - p1) * frac
+        let p1 = unsafe { *input.get_unchecked(src_idx) };
+        let p2 = unsafe { *input.get_unchecked(src_idx + 1) };
+        output.push(p1 + (p2 - p1) * frac);
+    }
+
+    // Boundary cases (only a few samples at the end)
+    for i in safe_output_len..output_len {
         let src_pos = i as f64 * inv_ratio;
         let src_idx = src_pos as usize;
         let frac = (src_pos - src_idx as f64) as f32;
 
         let sample = if src_idx + 1 < input.len() {
-            input[src_idx] * (1.0 - frac) + input[src_idx + 1] * frac
+            let p1 = input[src_idx];
+            let p2 = input[src_idx + 1];
+            p1 + (p2 - p1) * frac
         } else if src_idx < input.len() {
             input[src_idx]
         } else {
