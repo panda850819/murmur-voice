@@ -555,16 +555,10 @@ mod tests {
         );
 
         // No placeholders in text
-        assert_eq!(
-            restore_english("你好世界", &placeholders),
-            "你好世界"
-        );
+        assert_eq!(restore_english("你好世界", &placeholders), "你好世界");
 
         // Empty placeholders list
-        assert_eq!(
-            restore_english("你好 __E0__", &[]),
-            "你好 __E0__"
-        );
+        assert_eq!(restore_english("你好 __E0__", &[]), "你好 __E0__");
     }
 
     #[test]
@@ -579,7 +573,10 @@ mod tests {
         assert_eq!(strip_llm_prefix("Just some text"), "Just some text");
 
         // Prefix in the middle (should not strip)
-        assert_eq!(strip_llm_prefix("Note: Output: is here"), "Note: Output: is here");
+        assert_eq!(
+            strip_llm_prefix("Note: Output: is here"),
+            "Note: Output: is here"
+        );
 
         // Multiple prefixes - should only strip one
         assert_eq!(strip_llm_prefix("Output: Cleaned: text"), "Cleaned: text");
