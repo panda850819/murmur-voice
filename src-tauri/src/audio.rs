@@ -27,7 +27,10 @@ pub(crate) fn open_default_input() -> Option<(cpal::Device, cpal::SupportedStrea
 /// Used to gate both local Whisper and cloud (Groq) engines.
 pub(crate) fn is_audio_usable(samples: &[f32]) -> bool {
     if samples.len() < MIN_TRANSCRIBE_SAMPLES {
-        log::info!("audio too short ({} samples), skipping transcription", samples.len());
+        log::info!(
+            "audio too short ({} samples), skipping transcription",
+            samples.len()
+        );
         return false;
     }
     let step = (samples.len() / 1000).max(1);
@@ -200,11 +203,13 @@ impl AudioRecorder {
                             // 1. Convert to Mono F32
                             if channels > 1 {
                                 for frame in data.chunks(channels as usize) {
-                                    let sum: f32 = frame.iter().map(|&s| s as f32 / i16::MAX as f32).sum();
+                                    let sum: f32 =
+                                        frame.iter().map(|&s| s as f32 / i16::MAX as f32).sum();
                                     intermediate.push(sum / channels as f32);
                                 }
                             } else {
-                                intermediate.extend(data.iter().map(|&s| s as f32 / i16::MAX as f32));
+                                intermediate
+                                    .extend(data.iter().map(|&s| s as f32 / i16::MAX as f32));
                             }
 
                             // 2. Resample or pass through
@@ -264,11 +269,7 @@ impl AudioRecorder {
             let _ = handle.join();
         }
 
-        let samples = self
-            .samples
-            .lock()
-            .expect("samples mutex poisoned")
-            .clone();
+        let samples = self.samples.lock().expect("samples mutex poisoned").clone();
 
         // Short recording protection
         if samples.len() < MIN_SAMPLES {
@@ -290,13 +291,38 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
     // Optimization: Pre-calculate inverse ratio to use multiplication instead of division
     let inv_ratio = 1.0 / ratio;
 
-    for i in 0..output_len {
+    // Optimization: Split loop into hot path and tail path to bypass bounds checking
+    let safe_output_len = if input.len() > 1 {
+        let max_safe_len = ((input.len() - 1) as f64 * ratio).floor() as usize;
+        max_safe_len.min(output_len)
+    } else {
+        0
+    };
+
+    // Hot loop
+    for i in 0..safe_output_len {
+        let src_pos = i as f64 * inv_ratio;
+        let src_idx = src_pos as usize;
+        let frac = (src_pos - src_idx as f64) as f32;
+
+        // SAFETY: src_idx + 1 is strictly less than input.len() by safe_output_len calculation
+        let p1 = unsafe { *input.get_unchecked(src_idx) };
+        let p2 = unsafe { *input.get_unchecked(src_idx + 1) };
+
+        let sample = p1 + (p2 - p1) * frac;
+        output.push(sample);
+    }
+
+    // Tail loop
+    for i in safe_output_len..output_len {
         let src_pos = i as f64 * inv_ratio;
         let src_idx = src_pos as usize;
         let frac = (src_pos - src_idx as f64) as f32;
 
         let sample = if src_idx + 1 < input.len() {
-            input[src_idx] * (1.0 - frac) + input[src_idx + 1] * frac
+            let p1 = input[src_idx];
+            let p2 = input[src_idx + 1];
+            p1 + (p2 - p1) * frac
         } else if src_idx < input.len() {
             input[src_idx]
         } else {
@@ -334,12 +360,12 @@ mod tests {
         assert!((output[0] - 0.0).abs() < 1e-6); // idx 0
         assert!((output[1] - 0.5).abs() < 1e-6); // idx 0.5
         assert!((output[2] - 1.0).abs() < 1e-6); // idx 1.0
-        // idx 1.5 -> src_idx 1. (idx+1 out of bounds). input[1] = 1.0.
-        // 1.0 * (1-0.5) + (out_of_bounds? no, logic says if src_idx < len returns input[src_idx])
-        // wait, logic says:
-        // if src_idx + 1 < input.len() { lerp }
-        // else if src_idx < input.len() { input[src_idx] }
-        // else { 0.0 }
+                                                 // idx 1.5 -> src_idx 1. (idx+1 out of bounds). input[1] = 1.0.
+                                                 // 1.0 * (1-0.5) + (out_of_bounds? no, logic says if src_idx < len returns input[src_idx])
+                                                 // wait, logic says:
+                                                 // if src_idx + 1 < input.len() { lerp }
+                                                 // else if src_idx < input.len() { input[src_idx] }
+                                                 // else { 0.0 }
 
         // i=3. src_pos = 1.5. src_idx=1. frac=0.5.
         // src_idx+1 = 2. input len is 2. 2 < 2 is false.
