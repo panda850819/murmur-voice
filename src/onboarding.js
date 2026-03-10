@@ -56,10 +56,7 @@ function goToStep(n) {
 }
 
 function updateDots() {
-  const dot4 = document.querySelector('.dot[data-dot="4"]');
-  if (dot4) {
-    dot4.classList.toggle("hidden", chosenEngine === "groq");
-  }
+  // No-op: all 4 dots are always visible now
 }
 
 function startPttRecording() {
@@ -198,49 +195,17 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   el("onboard-groq-key").addEventListener("input", updateEngineNext);
 
-  // Engine next button (dynamic: local -> step 4, groq -> step 5)
+  // Engine next button (always goes to step 4 hotkey)
   el("btn-engine-next").addEventListener("click", () => {
-    goToStep(chosenEngine === "local" ? 4 : 5);
+    goToStep(4);
   });
 
-  // Hotkey back button (dynamic: local -> step 4, groq -> step 3)
+  // Hotkey back button (always goes back to step 3 engine choice)
   el("btn-hotkey-back").addEventListener("click", () => {
-    goToStep(chosenEngine === "local" ? 4 : 3);
+    goToStep(3);
   });
 
-  // Step 4: Model download
-  const modelReady = await invoke(COMMANDS.IS_MODEL_READY);
-  if (modelReady) {
-    el("btn-download").classList.add("hidden");
-    el("btn-step4-next").classList.remove("hidden");
-  }
-
-  el("btn-download").addEventListener("click", async () => {
-    el("btn-download").disabled = true;
-    el("btn-download").textContent = t("onboard.downloading");
-    el("model-progress-wrap").classList.remove("hidden");
-
-    try {
-      await invoke(COMMANDS.DOWNLOAD_MODEL_CMD);
-      el("model-progress-wrap").classList.add("hidden");
-      el("btn-download").classList.add("hidden");
-      el("btn-step4-next").classList.remove("hidden");
-    } catch (e) {
-      el("btn-download").disabled = false;
-      el("btn-download").textContent = t("onboard.retryDownload");
-    }
-  });
-
-  await listen(EVENTS.MODEL_DOWNLOAD_PROGRESS, (event) => {
-    const { downloaded, total } = event.payload;
-    if (total > 0) {
-      const pct = Math.round((downloaded / total) * 100);
-      el("model-progress-bar").style.width = pct + "%";
-      el("model-progress-text").textContent = pct + "%";
-    }
-  });
-
-  // Step 5: PTT key recording
+  // Step 4: PTT key recording
   el("onboard-ptt-record").addEventListener("click", () => {
     if (isRecording) {
       stopPttRecording();

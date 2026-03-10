@@ -76,17 +76,28 @@ pnpm tauri dev
 
 首次啟動時，Murmur 會引導你完成：
 1. 授予**麥克風**與**輔助使用**權限
-2. 下載 Whisper 模型（約 800MB，僅需一次）
+2. 選擇轉錄引擎（本機或 Groq）
 3. 設定按住說話鍵
+
+選擇本機引擎的話，Whisper 模型（約 1.5GB）會在第一次錄音時自動下載。
 
 ### 3. 轉錄引擎
 
 | 引擎 | 速度 | 品質 | 隱私 | 設定 |
 |------|------|------|------|------|
-| **本機 (Whisper)** | 約 1-3 秒 | 良好 | 音訊不離開裝置 | 下載模型（約 800MB） |
-| **Groq API** | <1 秒 | 良好 | 音訊傳送至 Groq 伺服器 | 從 [console.groq.com](https://console.groq.com) 取得免費 API key |
+| **本機 (Whisper)** | 約 1-3 秒 | 良好 | 音訊不離開裝置 | 首次錄音時自動下載模型（約 1.5GB） |
+| **Groq API** | <1 秒 | 良好 | 音訊傳送至 Groq 伺服器 | 免費 API key（[申請方式見下方](#申請-groq-api-key)） |
 
 切換引擎：**設定 > 轉錄 > 引擎**
+
+#### 申請 Groq API Key
+
+1. 前往 [console.groq.com](https://console.groq.com) 註冊帳號（支援 Google / GitHub 登入）
+2. 點選左側選單的 **API Keys**
+3. 點選 **Create API Key**，輸入名稱（例如「murmur」）
+4. 複製 key（以 `gsk_` 開頭）貼入 Murmur 設定
+
+Groq 免費方案的額度對個人使用非常充裕。同一組 API key 同時用於 Whisper 轉錄和 LLM 後處理。
 
 ### 4. LLM 後處理（建議啟用）
 

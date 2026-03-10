@@ -76,17 +76,28 @@ pnpm tauri dev
 
 On first launch, Murmur will guide you through:
 1. Granting **Microphone** and **Accessibility** permissions
-2. Downloading the Whisper model (~800MB, one-time)
+2. Choosing a transcription engine (Local or Groq)
 3. Setting your Push-to-Talk key
+
+If you choose the local engine, the Whisper model (~1.5GB) will download automatically on your first recording.
 
 ### 3. Transcription Engine
 
 | Engine | Speed | Quality | Privacy | Setup |
 |--------|-------|---------|---------|-------|
-| **Local (Whisper)** | ~1-3s | Good | Audio stays on device | Download model (~800MB) |
-| **Groq API** | <1s | Good | Audio sent to Groq servers | Free API key from [console.groq.com](https://console.groq.com) |
+| **Local (Whisper)** | ~1-3s | Good | Audio stays on device | Model auto-downloads on first use (~1.5GB) |
+| **Groq API** | <1s | Good | Audio sent to Groq servers | Free API key ([get one below](#getting-a-groq-api-key)) |
 
 To switch engines: **Settings > Transcription > Engine**
+
+#### Getting a Groq API Key
+
+1. Go to [console.groq.com](https://console.groq.com) and sign up (Google/GitHub login supported)
+2. Navigate to **API Keys** in the left sidebar
+3. Click **Create API Key**, give it a name (e.g. "murmur")
+4. Copy the key (starts with `gsk_`) and paste it into Murmur's settings
+
+Groq's free tier includes generous rate limits for personal use. The same API key is used for both Whisper transcription and LLM post-processing.
 
 ### 4. LLM Post-Processing (Recommended)
 

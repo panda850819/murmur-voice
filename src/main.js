@@ -70,6 +70,10 @@ window.addEventListener("DOMContentLoaded", async () => {
         appBadge.classList.remove("visible");
         appBadge.textContent = "";
         break;
+      case "downloading_model":
+        progressContainer.classList.remove("hidden");
+        setStatus(null, t("state.downloadingModel").replace(" {pct}%", ""));
+        break;
     }
   });
 
@@ -138,23 +142,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     invoke(COMMANDS.OPEN_SETTINGS);
   });
 
-  // Now check model status and trigger download if needed.
-  let modelReady = false;
-  try {
-    modelReady = await invoke(COMMANDS.IS_MODEL_READY);
-  } catch (_) {}
-
-  if (!modelReady) {
-    progressContainer.classList.remove("hidden");
-    setStatus(null, t("state.downloadingModel").replace(" {pct}%", ""));
-    // Fire and forget — progress updates come via events above.
-    invoke(COMMANDS.DOWNLOAD_MODEL_CMD).catch((err) => {
-      setStatus("error", t("state.downloadFailed"));
-      transcription.textContent = String(err);
-    });
-  } else {
-    setStatus(null, t("state.ready"));
-  }
+  // Model download is deferred — triggered on first recording attempt for local engine.
+  // Just show Ready status here.
+  setStatus(null, t("state.ready"));
 
   // Check Accessibility permission (macOS: required for hotkey)
   try {

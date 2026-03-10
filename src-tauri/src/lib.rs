@@ -74,6 +74,35 @@ fn signal_engine_init_done(app: &tauri::AppHandle) {
     }
 }
 
+/// Spawn a background thread to load the Whisper engine.
+/// Used by startup, post-download, and engine-switch paths.
+fn spawn_engine_load(app: tauri::AppHandle, model_path: std::path::PathBuf, context: &'static str) {
+    std::thread::spawn(move || {
+        let model_path_str = match model_path.to_str() {
+            Some(s) => s.to_string(),
+            None => {
+                log::error!("model path contains invalid UTF-8");
+                signal_engine_init_done(&app);
+                return;
+            }
+        };
+        match whisper::TranscriptionEngine::new(&model_path_str) {
+            Ok(engine) => {
+                let ms = app.state::<MurmurState>();
+                if let Ok(mut lock) = ms.engine.lock() {
+                    *lock = Some(engine);
+                }
+                signal_engine_init_done(&app);
+                log::info!("whisper engine loaded ({})", context);
+            }
+            Err(e) => {
+                log::error!("engine init failed ({}): {}", context, e);
+                signal_engine_init_done(&app);
+            }
+        }
+    });
+}
+
 #[cfg(target_os = "macos")]
 fn is_accessibility_trusted() -> bool {
     extern "C" {
@@ -139,6 +168,54 @@ fn reset_to_idle(state: &MurmurState, app: &tauri::AppHandle) {
 
 fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<MurmurState>();
+
+    // If local engine and model not downloaded, trigger download instead of recording
+    let is_local = state.settings.lock().map(|s| s.engine != "groq").unwrap_or(true);
+    if is_local && !model::is_model_ready(&state.app_data_dir, &model::ModelConfig::default()) {
+        log::info!("model not ready, triggering download");
+        show_main_window(app);
+        state.main_visible.store(true, Ordering::SeqCst);
+        // Emit downloading state so frontend shows progress bar
+        let _ = app.emit(events::RECORDING_STATE_CHANGED, "downloading_model");
+
+        let app_clone = app.clone();
+        let base = state.app_data_dir.clone();
+        std::thread::spawn(move || {
+            let rt = match tokio::runtime::Runtime::new() {
+                Ok(rt) => rt,
+                Err(e) => {
+                    log::error!("failed to create tokio runtime for download: {}", e);
+                    let _ = app_clone.emit(events::RECORDING_ERROR, e.to_string());
+                    return;
+                }
+            };
+            let config = model::ModelConfig::default();
+            let app_progress = app_clone.clone();
+            let result = rt.block_on(model::download_model(&base, &config, move |downloaded, total| {
+                let _ = app_progress.emit(events::MODEL_DOWNLOAD_PROGRESS, serde_json::json!({
+                    "downloaded": downloaded,
+                    "total": total,
+                }));
+            }));
+            match result {
+                Ok(()) => {
+                    let _ = app_clone.emit(events::MODEL_READY, ());
+                    // Load engine in background
+                    let ms = app_clone.state::<MurmurState>();
+                    if let Ok(mut done) = ms.engine_init_done.0.lock() {
+                        *done = false;
+                    }
+                    let model_path = model::model_path(&base, &config.filename);
+                    spawn_engine_load(app_clone, model_path, "first-record download");
+                }
+                Err(e) => {
+                    log::error!("model download failed: {}", e);
+                    let _ = app_clone.emit(events::RECORDING_ERROR, e.to_string());
+                }
+            }
+        });
+        return Ok(());
+    }
 
     // Cancel any pending preview auto-hide timer
     state.preview_generation.fetch_add(1, Ordering::SeqCst);
@@ -613,38 +690,11 @@ async fn download_model_cmd(app: tauri::AppHandle) -> Result<(), String> {
     murmur_state.downloading.store(false, Ordering::Release);
 
     // Spawn background engine init (don't block the command)
-    {
-        let init_done = &murmur_state.engine_init_done;
-        if let Ok(mut done) = init_done.0.lock() {
-            *done = false; // Mark as pending — background thread will set true
-        }
+    if let Ok(mut done) = murmur_state.engine_init_done.0.lock() {
+        *done = false; // Mark as pending — background thread will set true
     }
-    let app_handle = app.clone();
     let model_path = model::model_path(&base, &model::ModelConfig::default().filename);
-    std::thread::spawn(move || {
-        let model_path_str = match model_path.to_str() {
-            Some(s) => s.to_string(),
-            None => {
-                log::error!("model path contains invalid UTF-8");
-                signal_engine_init_done(&app_handle);
-                return;
-            }
-        };
-        match whisper::TranscriptionEngine::new(&model_path_str) {
-            Ok(engine) => {
-                let ms = app_handle.state::<MurmurState>();
-                if let Ok(mut lock) = ms.engine.lock() {
-                    *lock = Some(engine);
-                }
-                signal_engine_init_done(&app_handle);
-                log::info!("whisper engine loaded after download");
-            }
-            Err(e) => {
-                log::error!("engine init after download failed: {}", e);
-                signal_engine_init_done(&app_handle);
-            }
-        }
-    });
+    spawn_engine_load(app.clone(), model_path, "post-download");
 
     Ok(())
 }
@@ -684,12 +734,37 @@ fn save_settings(
         let _ = window.set_always_on_top(true);
     }
 
-    // Persist
+    // Persist first, then update in-memory state in a single lock
     settings::save_settings(&new_settings, &state.app_data_dir)?;
 
-    // Update in-memory state
-    if let Ok(mut s) = state.settings.lock() {
+    let engine_changed = {
+        let mut s = state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?;
+        let changed = s.engine != new_settings.engine;
         *s = new_settings;
+        changed
+    };
+
+    // Handle engine lifecycle on switch
+    if engine_changed {
+        let new_engine = &state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?.engine.clone();
+        if new_engine == "groq" {
+            // Unload whisper engine (frees ~2GB of memory)
+            if let Ok(mut lock) = state.engine.lock() {
+                if lock.take().is_some() {
+                    log::info!("unloaded whisper engine (switched to groq)");
+                }
+            }
+        } else {
+            // Load whisper engine in background
+            let model_config = model::ModelConfig::default();
+            if model::is_model_ready(&state.app_data_dir, &model_config) {
+                if let Ok(mut done) = state.engine_init_done.0.lock() {
+                    *done = false;
+                }
+                let model_path = model::model_path(&state.app_data_dir, &model_config.filename);
+                spawn_engine_load(app.clone(), model_path, "engine switch");
+            }
+        }
     }
 
     Ok(())
@@ -901,15 +976,17 @@ pub fn run() {
             hotkey::set_hotkey_target(t.modifier_mask, t.regular_key);
 
             // Register MurmurState with the resolved app_data_dir.
-            // engine_init_done starts as `true` if model is not ready (nothing to wait for),
-            // `false` if model exists (background thread will set it on completion).
+            // engine_init_done starts as `false` only when background engine init will run
+            // (local engine + model ready). Otherwise `true` (nothing to wait for).
             let model_ready = model::is_model_ready(&app_data_dir, &model::ModelConfig::default());
+            let is_local_engine = initial_settings.engine != "groq";
+            let will_load_engine = model_ready && is_local_engine;
             app.manage(MurmurState {
                 app_data_dir: app_data_dir.clone(),
                 app_state: state::AppState::new(),
                 recorder: Mutex::new(None),
                 engine: Mutex::new(None),
-                engine_init_done: (Mutex::new(!model_ready), std::sync::Condvar::new()),
+                engine_init_done: (Mutex::new(!will_load_engine), std::sync::Condvar::new()),
                 settings: Mutex::new(initial_settings),
                 live_stop: AtomicBool::new(false),
                 live_thread: Mutex::new(None),
@@ -1043,34 +1120,11 @@ pub fn run() {
                 }
             }
 
-            // Load whisper engine in background thread (non-blocking startup)
-            if model_ready {
-                let app_handle = app.handle().clone();
+            // Load whisper engine in background thread only for local engine users.
+            // Groq users don't need the local model at all — saves ~2GB of memory.
+            if will_load_engine {
                 let model_path = model::model_path(&app_data_dir, &model::ModelConfig::default().filename);
-                std::thread::spawn(move || {
-                    let model_path_str = match model_path.to_str() {
-                        Some(s) => s.to_string(),
-                        None => {
-                            log::error!("model path contains invalid UTF-8");
-                            signal_engine_init_done(&app_handle);
-                            return;
-                        }
-                    };
-                    match whisper::TranscriptionEngine::new(&model_path_str) {
-                        Ok(engine) => {
-                            let ms = app_handle.state::<MurmurState>();
-                            if let Ok(mut lock) = ms.engine.lock() {
-                                *lock = Some(engine);
-                            }
-                            signal_engine_init_done(&app_handle);
-                            log::info!("whisper engine loaded in background");
-                        }
-                        Err(e) => {
-                            log::error!("background engine init failed: {}", e);
-                            signal_engine_init_done(&app_handle);
-                        }
-                    }
-                });
+                spawn_engine_load(app.handle().clone(), model_path, "startup");
             }
 
             // Start hotkey listener
