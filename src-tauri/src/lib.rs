@@ -60,6 +60,8 @@ pub(crate) struct MurmurState {
     manual_show: AtomicBool,
     /// Guard to prevent concurrent model downloads (main + onboarding can both trigger).
     downloading: AtomicBool,
+    /// Guard to prevent concurrent translation operations.
+    translating: AtomicBool,
 }
 
 /// Signal that engine initialization is complete (success or failure).
@@ -164,6 +166,54 @@ fn hide_preview_window(app: &tauri::AppHandle) {
 fn reset_to_idle(state: &MurmurState, app: &tauri::AppHandle) {
     let _ = state.app_state.transition(state::RecordingState::Idle);
     let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_IDLE);
+}
+
+fn do_translate(app: &tauri::AppHandle) -> Result<(), String> {
+    let state = app.state::<MurmurState>();
+
+    // 1. Show main window with "translating" status
+    let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_TRANSLATING);
+    show_main_window(app);
+
+    // 2. Wait for modifier keys to be physically released
+    std::thread::sleep(std::time::Duration::from_millis(150));
+
+    // 3. Simulate Cmd+C to copy selection
+    clipboard::copy_selection().map_err(|e| format!("Failed to copy selection: {e}"))?;
+
+    // 4. Read clipboard
+    let text = clipboard::read_text()
+        .map_err(|e| format!("Failed to read clipboard: {e}"))?;
+    if text.trim().is_empty() {
+        return Err("No text selected".to_string());
+    }
+
+    // 5. Get translator (bypasses llm_enabled check)
+    let settings = state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?.clone();
+    let translator = llm::create_translator(&settings)
+        .ok_or("Enable AI Processing provider in Settings to use translation")?;
+
+    // 6. Translate via LLM
+    let translated = translator.translate(&text, &settings.translate_language)
+        .map_err(|e| e.to_string())?;
+
+    // 7. Write to clipboard and paste (clipboard retains translated text)
+    clipboard::set_and_paste(&translated).map_err(|e| e.to_string())?;
+
+    // 8. Show preview (stays visible, no auto-hide)
+    let _ = app.emit(
+        events::TRANSCRIPTION_COMPLETE,
+        serde_json::json!({
+            "text": translated,
+            "mode": events::MODE_TRANSLATED
+        }),
+    );
+    show_preview_window(app);
+
+    // 9. Reset main window state
+    let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_IDLE);
+
+    Ok(())
 }
 
 fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
@@ -724,9 +774,18 @@ fn save_settings(
     state: tauri::State<'_, MurmurState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
+    // Reject if translate hotkey conflicts with PTT key
+    if new_settings.translate_hotkey == new_settings.ptt_key {
+        return Err("Translate hotkey cannot be the same as Push-to-Talk key".to_string());
+    }
+
     // Apply hotkey change
     let t = new_settings.ptt_key_target();
     hotkey::set_hotkey_target(t.modifier_mask, t.regular_key);
+
+    // Apply translate hotkey change
+    let tr = new_settings.translate_key_target();
+    hotkey::set_translate_target(tr.modifier_mask, tr.regular_key);
 
     // Apply window opacity
     if let Some(window) = app.get_webview_window("main") {
@@ -828,6 +887,19 @@ fn resume_hotkey_listener(state: tauri::State<'_, MurmurState>) {
     if let Ok(s) = state.settings.lock() {
         let t = s.ptt_key_target();
         hotkey::set_hotkey_target(t.modifier_mask, t.regular_key);
+    }
+}
+
+#[tauri::command]
+fn pause_translate_hotkey() {
+    hotkey::pause_translate_hotkey();
+}
+
+#[tauri::command]
+fn resume_translate_hotkey(state: tauri::State<'_, MurmurState>) {
+    if let Ok(s) = state.settings.lock() {
+        let t = s.translate_key_target();
+        hotkey::set_translate_target(t.modifier_mask, t.regular_key);
     }
 }
 
@@ -952,6 +1024,8 @@ pub fn run() {
             copy_to_clipboard,
             pause_hotkey_listener,
             resume_hotkey_listener,
+            pause_translate_hotkey,
+            resume_translate_hotkey,
             add_dictionary_term,
             add_dictionary_terms,
             check_for_updates,
@@ -974,6 +1048,8 @@ pub fn run() {
             );
             let t = initial_settings.ptt_key_target();
             hotkey::set_hotkey_target(t.modifier_mask, t.regular_key);
+            let tr = initial_settings.translate_key_target();
+            hotkey::set_translate_target(tr.modifier_mask, tr.regular_key);
 
             // Register MurmurState with the resolved app_data_dir.
             // engine_init_done starts as `false` only when background engine init will run
@@ -994,6 +1070,7 @@ pub fn run() {
                 main_visible: AtomicBool::new(false),
                 manual_show: AtomicBool::new(false),
                 downloading: AtomicBool::new(false),
+                translating: AtomicBool::new(false),
             });
 
             // Create system tray with Settings + Show/Hide + Quit
@@ -1278,7 +1355,33 @@ pub fn run() {
                         }
                         hotkey::HotkeyEvent::EventTapFailed => unreachable!(),
                         hotkey::HotkeyEvent::TranslatePressed => {
-                            // TODO: implement translate hotkey handler (Task 4)
+                            let murmur_state = app_handle.state::<MurmurState>();
+                            // Don't translate while recording or already translating
+                            if murmur_state.app_state.current()
+                                != state::RecordingState::Idle
+                            {
+                                continue;
+                            }
+                            if murmur_state
+                                .translating
+                                .swap(true, Ordering::Acquire)
+                            {
+                                continue; // already in progress
+                            }
+                            let app2 = app_handle.clone();
+                            std::thread::spawn(move || {
+                                let ms = app2.state::<MurmurState>();
+                                let result = do_translate(&app2);
+                                ms.translating.store(false, Ordering::Release);
+                                if let Err(e) = result {
+                                    let _ = app2.emit(events::RECORDING_ERROR, e);
+                                    let _ = app2.emit(
+                                        events::RECORDING_STATE_CHANGED,
+                                        events::STATE_IDLE,
+                                    );
+                                }
+                            });
+                            continue;
                         }
                     }
                 }
