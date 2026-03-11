@@ -31,6 +31,7 @@ Murmur is a voice dictation tool that transcribes your speech and inserts polish
 - **Multi-Provider LLM** -- Groq (cloud), Ollama (local), or any OpenAI-compatible endpoint for text enhancement
 - **Fully Offline Mode** -- Local Whisper + Ollama for complete privacy (no data leaves your machine)
 - **LLM Post-Processing** -- Clean up filler words, add punctuation, Simplified-to-Traditional Chinese conversion
+- **Translate Hotkey** -- Select text in any app, press a hotkey (default: Option+T) to translate and replace in-place via LLM
 - **Smart Clipboard** -- Auto-pastes when a text field is focused; copies to clipboard only when no text input is detected (e.g. on Desktop)
 - **App-Aware Style** -- Automatically adjusts output tone based on the active app (e.g. formal in Slack, technical in VS Code)
 - **Personal Dictionary** -- Add custom terms to improve transcription accuracy; inline dictionary chips appear in real-time while editing
@@ -56,10 +57,11 @@ Download the latest release from the [Releases page](https://github.com/panda850
 ## How It Works
 
 ```
-Hotkey -> Record (cpal) -> Transcribe (Whisper) -> LLM Clean-up (optional) -> Smart Clipboard (paste or copy-only)
+Voice:     Hotkey -> Record (cpal) -> Transcribe (Whisper) -> LLM Clean-up (optional) -> Smart Clipboard
+Translate: Option+T -> Copy selection -> LLM Translate -> Paste back (replace selection)
 ```
 
-**Each recording triggers at most 2 API calls** (when using Groq): one for Whisper transcription, one for LLM post-processing.
+**Each recording triggers at most 2 API calls** (when using Groq): one for Whisper transcription, one for LLM post-processing. Translation triggers 1 API call.
 
 ## Setup Guide
 
@@ -119,13 +121,22 @@ What it does:
 
 To enable: **Settings > AI Processing > LLM Post-Processing**
 
-### 5. Personal Dictionary
+### 5. Translation
+
+Select text in any app and press **Option+T** (default) to translate it in-place. The translated text replaces your selection and appears in the preview window.
+
+- Uses the same LLM provider configured in AI Processing (Groq, Ollama, or Custom)
+- Target language configurable in **Settings > Translation > Target Language**
+- Translate hotkey customizable in **Settings > Translation > Translate Hotkey**
+- Preview window stays visible until you close it or click Copy
+
+### 6. Personal Dictionary
 
 Add frequently used terms (names, jargon, acronyms) to improve transcription accuracy. These are injected into Whisper's initial prompt.
 
 To configure: **Settings > Transcription > Dictionary** (type a term, press Enter to add)
 
-### 6. App-Aware Style
+### 7. App-Aware Style
 
 When enabled, Murmur detects the foreground app and adjusts the LLM output tone:
 
