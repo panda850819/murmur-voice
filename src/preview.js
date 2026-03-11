@@ -18,6 +18,12 @@ let addedWords = new Set();
 let dismissedWords = new Set();
 let debounceTimer = null;
 
+// Cache Intl.Segmenter to avoid expensive re-instantiation on every text change
+const globalSegmenter =
+  typeof Intl !== "undefined" && Intl.Segmenter
+    ? new Intl.Segmenter(undefined, { granularity: "word" })
+    : null;
+
 function setHeader(text, processing) {
   const el = headerText();
   if (dotsInterval) {
@@ -80,9 +86,8 @@ function disableEditing() {
 }
 
 function tokenize(text) {
-  if (typeof Intl !== "undefined" && Intl.Segmenter) {
-    const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
-    return [...segmenter.segment(text)]
+  if (globalSegmenter) {
+    return [...globalSegmenter.segment(text)]
       .filter((s) => s.isWordLike)
       .map((s) => s.segment);
   }
