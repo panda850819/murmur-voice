@@ -65,6 +65,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       case RECORDING_STATES.PROCESSING:
         setStatus("transcribing", t("state.processing"));
         break;
+      case RECORDING_STATES.TRANSLATING:
+        setStatus("transcribing", t("state.translating"));
+        transcription.textContent = "";
+        break;
       case RECORDING_STATES.IDLE:
         setStatus(null, t("state.ready"));
         appBadge.classList.remove("visible");
