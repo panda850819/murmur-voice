@@ -175,10 +175,7 @@ fn do_translate(app: &tauri::AppHandle) -> Result<(), String> {
     let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_TRANSLATING);
     show_main_window(app);
 
-    // 2. Wait for modifier keys to be physically released
-    std::thread::sleep(std::time::Duration::from_millis(150));
-
-    // 3. Simulate Cmd+C to copy selection
+    // 2. Simulate Cmd+C to copy selection (copy_selection releases modifiers first)
     clipboard::copy_selection().map_err(|e| format!("Failed to copy selection: {e}"))?;
 
     // 4. Read clipboard

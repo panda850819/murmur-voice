@@ -64,7 +64,10 @@ pub(crate) fn copy_only(text: &str) -> Result<(), ClipboardError> {
 }
 
 /// Simulates Cmd+C (macOS) / Ctrl+C (Windows) to copy the current text selection.
+/// Releases all modifier keys first to prevent combos like Cmd+Option+C.
 pub(crate) fn copy_selection() -> Result<(), ClipboardError> {
+    release_all_modifiers();
+    std::thread::sleep(std::time::Duration::from_millis(50));
     simulate_copy()?;
     std::thread::sleep(std::time::Duration::from_millis(150));
     Ok(())
@@ -138,6 +141,27 @@ fn simulate_paste() -> Result<(), ClipboardError> {
     }
 
     Ok(())
+}
+
+/// Release all modifier keys to ensure a clean state before simulating key combos.
+/// This prevents the physically-held translate hotkey modifier (e.g. Option)
+/// from interfering with the simulated Cmd+C.
+fn release_all_modifiers() {
+    use rdev::{simulate, EventType, Key};
+
+    let modifiers = [
+        Key::Alt,
+        Key::MetaLeft,
+        Key::MetaRight,
+        Key::ShiftLeft,
+        Key::ShiftRight,
+        Key::ControlLeft,
+        Key::ControlRight,
+    ];
+
+    for key in &modifiers {
+        let _ = simulate(&EventType::KeyRelease(*key));
+    }
 }
 
 #[cfg(target_os = "macos")]
