@@ -1277,6 +1277,9 @@ pub fn run() {
                             });
                         }
                         hotkey::HotkeyEvent::EventTapFailed => unreachable!(),
+                        hotkey::HotkeyEvent::TranslatePressed => {
+                            // TODO: implement translate hotkey handler (Task 4)
+                        }
                     }
                 }
             });

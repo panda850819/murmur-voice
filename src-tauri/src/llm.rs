@@ -159,6 +159,37 @@ fn strip_llm_prefix(text: &str) -> &str {
     result
 }
 
+fn translate_language_name(code: &str) -> &str {
+    match code {
+        "en" => "English",
+        "zh" => "Traditional Chinese (zh-TW)",
+        "ja" => "Japanese",
+        "ko" => "Korean",
+        "fr" => "French",
+        "de" => "German",
+        "es" => "Spanish",
+        "pt" => "Portuguese",
+        "ru" => "Russian",
+        "ar" => "Arabic",
+        "th" => "Thai",
+        "vi" => "Vietnamese",
+        "id" => "Indonesian",
+        _ => code,
+    }
+}
+
+fn build_translate_prompt(target_language: &str) -> String {
+    let lang_name = translate_language_name(target_language);
+    format!(
+        r#"You are a translator. The user message contains text to translate.
+Translate the entire text to {lang_name}.
+Output ONLY the translated text. No explanations, no quotes, no commentary.
+Preserve the original formatting (paragraphs, line breaks, lists).
+Do NOT add or remove content.
+If the text is already in {lang_name}, return it unchanged."#
+    )
+}
+
 // --- TextEnhancer trait ---
 
 /// Trait for LLM post-processing providers.
@@ -172,9 +203,9 @@ pub(crate) trait TextEnhancer: Send + Sync {
 /// OpenAI-compatible LLM provider. Covers Groq, Ollama, and any custom endpoint.
 pub(crate) struct OpenAICompatibleEnhancer {
     pub api_url: String,
-    api_key: String,
-    model: String,
-    local: bool,
+    pub(crate) api_key: String,
+    pub(crate) model: String,
+    pub(crate) local: bool,
     provider_name: String,
 }
 
@@ -324,6 +355,97 @@ pub(crate) fn create_enhancer(
                 &settings.custom_llm_key,
                 &settings.custom_llm_model,
             )))
+        }
+        _ => None,
+    }
+}
+
+impl OpenAICompatibleEnhancer {
+    /// Translates text using this endpoint with a translation-specific prompt.
+    pub(crate) fn translate(&self, text: &str, target_language: &str) -> Result<String, LlmError> {
+        let prompt = build_translate_prompt(target_language);
+        let max_tokens = (text.len() * 4).clamp(256, 4096) as u64;
+
+        let mut body = serde_json::json!({
+            "model": &self.model,
+            "messages": [
+                { "role": "system", "content": prompt },
+                { "role": "user", "content": text }
+            ],
+            "temperature": 0.3,
+            "max_tokens": max_tokens,
+        });
+
+        if !self.local {
+            body["frequency_penalty"] = serde_json::json!(0.0);
+        }
+
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e| LlmError::Api(format!("failed to create runtime: {e}")))?;
+
+        let response = rt.block_on(async {
+            let client = reqwest::Client::new();
+            let mut req = client
+                .post(&self.api_url)
+                .header("Content-Type", "application/json")
+                .json(&body);
+
+            if !self.api_key.is_empty() {
+                req = req.header("Authorization", format!("Bearer {}", self.api_key));
+            }
+
+            req.send().await
+        })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body_text = rt
+                .block_on(response.text())
+                .unwrap_or_else(|e| format!("(failed to read body: {e})"));
+            return Err(LlmError::Api(format!("{status}: {body_text}")));
+        }
+
+        let chat: ChatResponse = rt.block_on(response.json())?;
+        let content = chat
+            .choices
+            .into_iter()
+            .next()
+            .ok_or(LlmError::Format)?
+            .message
+            .content;
+
+        Ok(content.trim().to_string())
+    }
+}
+
+/// Creates an OpenAICompatibleEnhancer for translation.
+/// Unlike create_enhancer, this ignores llm_enabled — translation has its own toggle.
+pub(crate) fn create_translator(
+    settings: &crate::settings::Settings,
+) -> Option<OpenAICompatibleEnhancer> {
+    match settings.llm_provider.as_str() {
+        "groq" => {
+            if settings.groq_api_key.is_empty() {
+                return None;
+            }
+            Some(OpenAICompatibleEnhancer::groq(
+                &settings.groq_api_key,
+                &settings.llm_model,
+            ))
+        }
+        "ollama" => Some(OpenAICompatibleEnhancer::ollama(
+            &settings.ollama_url,
+            &settings.ollama_model,
+        )),
+        "custom" => {
+            if settings.custom_llm_url.is_empty() {
+                return None;
+            }
+            Some(OpenAICompatibleEnhancer::custom(
+                &settings.custom_llm_url,
+                &settings.custom_llm_key,
+                &settings.custom_llm_model,
+            ))
         }
         _ => None,
     }
@@ -599,5 +721,48 @@ mod tests {
 
         let prompt_default = build_system_prompt("unknown_style");
         assert!(prompt_default.contains("Tone: natural and clear"));
+    }
+
+    #[test]
+    fn test_build_translate_prompt() {
+        let prompt = build_translate_prompt("zh");
+        assert!(prompt.contains("Traditional Chinese (zh-TW)"));
+        assert!(prompt.contains("Output ONLY the translated text"));
+    }
+
+    #[test]
+    fn test_build_translate_prompt_unknown() {
+        let prompt = build_translate_prompt("xyz");
+        assert!(prompt.contains("xyz"));
+    }
+
+    #[test]
+    fn test_translate_language_name() {
+        assert_eq!(translate_language_name("en"), "English");
+        assert_eq!(translate_language_name("zh"), "Traditional Chinese (zh-TW)");
+        assert_eq!(translate_language_name("unknown"), "unknown");
+    }
+
+    #[test]
+    fn test_create_translator_groq() {
+        let s = Settings {
+            groq_api_key: "gsk_test".to_string(),
+            llm_provider: "groq".to_string(),
+            llm_enabled: false, // should still work
+            ..Default::default()
+        };
+        let t = create_translator(&s);
+        assert!(t.is_some());
+        assert_eq!(t.unwrap().name(), "Groq");
+    }
+
+    #[test]
+    fn test_create_translator_no_key() {
+        let s = Settings {
+            groq_api_key: String::new(),
+            llm_provider: "groq".to_string(),
+            ..Default::default()
+        };
+        assert!(create_translator(&s).is_none());
     }
 }
