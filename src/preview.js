@@ -291,6 +291,15 @@ window.addEventListener("DOMContentLoaded", async () => {
       case RECORDING_STATES.PROCESSING:
         setHeader(t("state.processing"), true);
         break;
+      case RECORDING_STATES.TRANSLATING:
+        clearAutoHide();
+        setHeader(t("state.translating"), true);
+        setText("", null);
+        setCharCount("");
+        copyBtn().classList.add("hidden");
+        disableEditing();
+        hideDictSuggest();
+        break;
       case RECORDING_STATES.IDLE:
         // Auto-hide is handled by the transcription_complete handler below.
         break;
@@ -318,6 +327,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       disableEditing();
     } else {
       setHeader(t("state.done"), false);
+      if (mode === TRANSCRIPTION_MODES.TRANSLATED) {
+        setHeader(t("state.translated"), false);
+      }
       setText(text, null);
       setCharCount(text);
       scrollToBottom();
@@ -325,8 +337,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       copyBtn().classList.remove("hidden");
       enableEditing();
 
-      // Auto-hide: 3s for pasted mode, 30s for clipboard mode
-      if (text && text.trim().length > 0) {
+      // Auto-hide: 3s for pasted mode, 30s for clipboard mode, none for translated
+      if (text && text.trim().length > 0 && mode !== TRANSCRIPTION_MODES.TRANSLATED) {
         const delay = mode === TRANSCRIPTION_MODES.PASTED ? 3000 : 30000;
         autoHideTimer = setTimeout(async () => {
           try {
