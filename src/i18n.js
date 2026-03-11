@@ -105,6 +105,13 @@ const I18N = {
     "preview.add": "Add",
     "preview.addAll": "Add All",
     "preview.dismiss": "Dismiss",
+    // Translation
+    "group.translation": "Translation",
+    "row.translateHotkey": "Translate Hotkey",
+    "row.translateLang": "Target Language",
+    "hint.translateProvider": "Uses the AI provider configured above",
+    "state.translating": "Translating...",
+    "state.translated": "Translated",
   },
   "zh-TW": {
     "header.title": "偏好設定",
@@ -209,6 +216,12 @@ const I18N = {
     "preview.add": "加入",
     "preview.addAll": "全部加入",
     "preview.dismiss": "忽略",
+    "group.translation": "翻譯",
+    "row.translateHotkey": "翻譯快捷鍵",
+    "row.translateLang": "目標語言",
+    "hint.translateProvider": "使用上方設定的 AI 供應商",
+    "state.translating": "翻譯中...",
+    "state.translated": "已翻譯",
   },
 };
 
