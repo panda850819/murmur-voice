@@ -63,6 +63,45 @@ pub(crate) fn copy_only(text: &str) -> Result<(), ClipboardError> {
     Ok(())
 }
 
+/// Simulates Cmd+C (macOS) / Ctrl+C (Windows) to copy the current text selection.
+pub(crate) fn copy_selection() -> Result<(), ClipboardError> {
+    simulate_copy()?;
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    Ok(())
+}
+
+/// Reads current clipboard text content.
+pub(crate) fn read_text() -> Result<String, ClipboardError> {
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|e| ClipboardError::Access(e.to_string()))?;
+    clipboard
+        .get_text()
+        .map_err(|e| ClipboardError::Access(e.to_string()))
+}
+
+/// Sets clipboard text and pastes via Cmd+V / Ctrl+V.
+/// Unlike insert_text(), does NOT restore original clipboard content —
+/// the translated text stays on the clipboard for subsequent pastes.
+pub(crate) fn set_and_paste(text: &str) -> Result<(), ClipboardError> {
+    if text.is_empty() {
+        return Ok(());
+    }
+
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|e| ClipboardError::Access(e.to_string()))?;
+    clipboard
+        .set_text(text)
+        .map_err(|e| ClipboardError::Access(e.to_string()))?;
+
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    simulate_paste()?;
+
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    Ok(())
+}
+
 #[cfg(target_os = "macos")]
 fn simulate_paste() -> Result<(), ClipboardError> {
     use rdev::{simulate, EventType, Key};
@@ -90,6 +129,44 @@ fn simulate_paste() -> Result<(), ClipboardError> {
         EventType::KeyPress(Key::ControlLeft),
         EventType::KeyPress(Key::KeyV),
         EventType::KeyRelease(Key::KeyV),
+        EventType::KeyRelease(Key::ControlLeft),
+    ];
+
+    for event in &events {
+        simulate(event).map_err(|e| ClipboardError::Simulate(format!("{:?}", e)))?;
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn simulate_copy() -> Result<(), ClipboardError> {
+    use rdev::{simulate, EventType, Key};
+
+    let events = [
+        EventType::KeyPress(Key::MetaLeft),
+        EventType::KeyPress(Key::KeyC),
+        EventType::KeyRelease(Key::KeyC),
+        EventType::KeyRelease(Key::MetaLeft),
+    ];
+
+    for event in &events {
+        simulate(event).map_err(|e| ClipboardError::Simulate(format!("{:?}", e)))?;
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn simulate_copy() -> Result<(), ClipboardError> {
+    use rdev::{simulate, EventType, Key};
+
+    let events = [
+        EventType::KeyPress(Key::ControlLeft),
+        EventType::KeyPress(Key::KeyC),
+        EventType::KeyRelease(Key::KeyC),
         EventType::KeyRelease(Key::ControlLeft),
     ];
 
