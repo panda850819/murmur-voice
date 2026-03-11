@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc;
 
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetMessageW, SetWindowsHookExW, KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL,
     WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
@@ -13,6 +14,7 @@ pub(crate) enum HotkeyEvent {
     Released,
     EscCancel,
     EventTapFailed,
+    TranslatePressed,
 }
 
 /// The active PTT modifier virtual key code. Updated at runtime via settings.
@@ -46,6 +48,23 @@ pub(crate) fn pause_hotkey() {
     REGULAR_KEY.store(0, Ordering::SeqCst);
 }
 
+/// The active translate modifier virtual key code.
+static TRANSLATE_MODIFIER_MASK: AtomicU64 = AtomicU64::new(0);
+/// The translate regular key virtual key code.
+static TRANSLATE_REGULAR_KEY: AtomicU32 = AtomicU32::new(0);
+
+/// Update the translate hotkey target at runtime.
+pub(crate) fn set_translate_target(modifier: u64, regular_key: u32) {
+    TRANSLATE_MODIFIER_MASK.store(modifier, Ordering::SeqCst);
+    TRANSLATE_REGULAR_KEY.store(regular_key, Ordering::SeqCst);
+}
+
+/// Temporarily pause translate hotkey detection.
+pub(crate) fn pause_translate_hotkey() {
+    TRANSLATE_MODIFIER_MASK.store(0, Ordering::SeqCst);
+    TRANSLATE_REGULAR_KEY.store(0, Ordering::SeqCst);
+}
+
 unsafe extern "system" fn keyboard_hook_proc(
     n_code: i32,
     w_param: WPARAM,
@@ -65,6 +84,23 @@ unsafe extern "system" fn keyboard_hook_proc(
                 let _ = sender.send(HotkeyEvent::EscCancel);
             }
             // Pass through to other apps (don't return early with LRESULT(1))
+        }
+
+        // Translate hotkey detection — always a combo (modifier+key)
+        let tr_modifier_vk = TRANSLATE_MODIFIER_MASK.load(Ordering::SeqCst) as u32;
+        let tr_regular_vk = TRANSLATE_REGULAR_KEY.load(Ordering::SeqCst);
+        if tr_regular_vk != 0 && tr_modifier_vk != 0 {
+            if let Some(ref sender) = GLOBAL_SENDER {
+                if kb.vkCode == tr_regular_vk && is_down {
+                    let mod_held = unsafe {
+                        GetAsyncKeyState(tr_modifier_vk as i32) < 0
+                    };
+                    if mod_held {
+                        let _ = sender.send(HotkeyEvent::TranslatePressed);
+                        return LRESULT(1); // consume the key event
+                    }
+                }
+            }
         }
 
         if regular_vk != 0 {

@@ -8,6 +8,7 @@ pub(crate) enum HotkeyEvent {
     Released,
     EscCancel,
     EventTapFailed,
+    TranslatePressed,
 }
 
 /// The active PTT modifier mask. Updated at runtime via settings.
@@ -27,6 +28,23 @@ pub(crate) fn set_hotkey_target(modifier: u64, regular_key: u32) {
 pub(crate) fn pause_hotkey() {
     MODIFIER_MASK.store(0, Ordering::SeqCst);
     REGULAR_KEY.store(0, Ordering::SeqCst);
+}
+
+/// The active translate modifier mask. Updated at runtime via settings.
+static TRANSLATE_MODIFIER_MASK: AtomicU64 = AtomicU64::new(0);
+/// The translate regular key CGKeyCode (always a combo — never 0 in practice).
+static TRANSLATE_REGULAR_KEY: AtomicU32 = AtomicU32::new(0);
+
+/// Update the translate hotkey target at runtime.
+pub(crate) fn set_translate_target(modifier: u64, regular_key: u32) {
+    TRANSLATE_MODIFIER_MASK.store(modifier, Ordering::SeqCst);
+    TRANSLATE_REGULAR_KEY.store(regular_key, Ordering::SeqCst);
+}
+
+/// Temporarily pause translate hotkey detection.
+pub(crate) fn pause_translate_hotkey() {
+    TRANSLATE_MODIFIER_MASK.store(0, Ordering::SeqCst);
+    TRANSLATE_REGULAR_KEY.store(0, Ordering::SeqCst);
 }
 
 // CGEvent type constants
@@ -105,6 +123,20 @@ unsafe extern "C" fn event_tap_callback(
         if keycode == 0x35 {
             let _ = sender.send(HotkeyEvent::EscCancel);
             return event; // pass through ESC to other apps
+        }
+    }
+
+    // Translate hotkey detection — always a combo (modifier+key)
+    let tr_modifier = TRANSLATE_MODIFIER_MASK.load(Ordering::SeqCst);
+    let tr_key = TRANSLATE_REGULAR_KEY.load(Ordering::SeqCst);
+    if tr_key != 0 && event_type == K_CG_EVENT_KEY_DOWN {
+        let keycode = CGEventGetIntegerValueField(event, K_CG_KEYBOARD_EVENT_KEYCODE) as u32;
+        if keycode == tr_key {
+            let flags = CGEventGetFlags(event);
+            if (flags & tr_modifier) != 0 {
+                let _ = sender.send(HotkeyEvent::TranslatePressed);
+                return std::ptr::null_mut(); // consume the key event
+            }
         }
     }
 
