@@ -207,8 +207,10 @@ fn do_translate(app: &tauri::AppHandle) -> Result<(), String> {
     );
     show_preview_window(app);
 
-    // 9. Reset main window state
+    // 9. Reset main window state and hide it (preview stays visible)
     let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_IDLE);
+    hide_main_window(app);
+    state.main_visible.store(false, Ordering::SeqCst);
 
     Ok(())
 }
