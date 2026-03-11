@@ -31,6 +31,14 @@ fn default_en() -> String {
     "en".to_string()
 }
 
+fn default_translate_hotkey() -> String {
+    "AltLeft+KeyT".to_string()
+}
+
+fn default_translate_language() -> String {
+    "en".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Settings {
     pub ptt_key: String,
@@ -66,6 +74,10 @@ pub(crate) struct Settings {
     pub app_aware_style: bool,
     #[serde(default = "default_en")]
     pub ui_locale: String,
+    #[serde(default = "default_translate_hotkey")]
+    pub translate_hotkey: String,
+    #[serde(default = "default_translate_language")]
+    pub translate_language: String,
 }
 
 /// Target for PTT key matching — supports single modifier or modifier+key combos.
@@ -98,6 +110,24 @@ impl Default for Settings {
             custom_llm_model: String::new(),
             app_aware_style: true,
             ui_locale: default_en(),
+            translate_hotkey: default_translate_hotkey(),
+            translate_language: default_translate_language(),
+        }
+    }
+}
+
+pub(crate) fn parse_hotkey(key: &str) -> PttKeyTarget {
+    if let Some(plus_pos) = key.find('+') {
+        let modifier_str = &key[..plus_pos];
+        let key_str = &key[plus_pos + 1..];
+        PttKeyTarget {
+            modifier_mask: modifier_mask_for(modifier_str),
+            regular_key: keycode_for_code(key_str),
+        }
+    } else {
+        PttKeyTarget {
+            modifier_mask: modifier_mask_for(key),
+            regular_key: 0,
         }
     }
 }
@@ -106,19 +136,11 @@ impl Settings {
     /// Returns a PttKeyTarget for the configured PTT key.
     /// Supports single modifier ("AltLeft") and combo ("AltLeft+KeyZ") formats.
     pub fn ptt_key_target(&self) -> PttKeyTarget {
-        if let Some(plus_pos) = self.ptt_key.find('+') {
-            let modifier_str = &self.ptt_key[..plus_pos];
-            let key_str = &self.ptt_key[plus_pos + 1..];
-            PttKeyTarget {
-                modifier_mask: modifier_mask_for(modifier_str),
-                regular_key: keycode_for_code(key_str),
-            }
-        } else {
-            PttKeyTarget {
-                modifier_mask: modifier_mask_for(&self.ptt_key),
-                regular_key: 0,
-            }
-        }
+        parse_hotkey(&self.ptt_key)
+    }
+
+    pub fn translate_key_target(&self) -> PttKeyTarget {
+        parse_hotkey(&self.translate_hotkey)
     }
 
     /// Returns the whisper language code.
@@ -492,5 +514,43 @@ mod tests {
             ..Settings::default()
         };
         assert_eq!(s.whisper_initial_prompt(), "繁體中文語音轉錄，使用台灣正體中文。 Hello World");
+    }
+
+    #[test]
+    fn test_deserialize_without_translate_settings() {
+        let json = r#"{
+            "ptt_key": "AltLeft",
+            "language": "auto",
+            "engine": "local",
+            "model": "large-v3-turbo",
+            "groq_api_key": "",
+            "window_opacity": 0.78,
+            "auto_start": false
+        }"#;
+        let s: Settings = serde_json::from_str(json).unwrap();
+        assert_eq!(s.translate_hotkey, "AltLeft+KeyT");
+        assert_eq!(s.translate_language, "en");
+    }
+
+    #[test]
+    fn test_parse_hotkey_combo() {
+        let t = parse_hotkey("AltLeft+KeyT");
+        assert_ne!(t.modifier_mask, 0);
+        assert_ne!(t.regular_key, 0);
+    }
+
+    #[test]
+    fn test_parse_hotkey_single() {
+        let t = parse_hotkey("AltLeft");
+        assert_ne!(t.modifier_mask, 0);
+        assert_eq!(t.regular_key, 0);
+    }
+
+    #[test]
+    fn test_translate_key_target() {
+        let s = Settings::default();
+        let t = s.translate_key_target();
+        assert_ne!(t.modifier_mask, 0);
+        assert_ne!(t.regular_key, 0);
     }
 }
