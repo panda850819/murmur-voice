@@ -48,6 +48,10 @@ let dictTags = [];
 let dictTagsSnapshot = [];
 let undoTimer = null;
 let undoEntry = null; // { term, index }
+let currentTranslateKey = "AltLeft+KeyT";
+let isRecordingTranslate = false;
+let recordingTranslatePhase = null;
+let capturedTranslateModifier = null;
 
 const el = (id) => document.getElementById(id);
 
@@ -71,6 +75,7 @@ function startRecording() {
   recordingPhase = "modifier";
   capturedModifier = null;
   invoke(COMMANDS.PAUSE_HOTKEY_LISTENER).catch(() => {});
+  invoke(COMMANDS.PAUSE_TRANSLATE_HOTKEY).catch(() => {});
   const btn = el("ptt-record");
   btn.textContent = t("ptt.holdModifier");
   btn.classList.add("recording");
@@ -81,42 +86,93 @@ function stopRecording() {
   recordingPhase = null;
   capturedModifier = null;
   invoke(COMMANDS.RESUME_HOTKEY_LISTENER).catch(() => {});
+  invoke(COMMANDS.RESUME_TRANSLATE_HOTKEY).catch(() => {});
   const btn = el("ptt-record");
   btn.classList.remove("recording");
   btn.textContent = displayNameFor(currentPttKey);
 }
 
+function setTranslateKey(code) {
+  currentTranslateKey = code;
+  el("translate-record").textContent = displayNameFor(code);
+}
+
+function startTranslateRecording() {
+  isRecordingTranslate = true;
+  recordingTranslatePhase = "modifier";
+  capturedTranslateModifier = null;
+  invoke(COMMANDS.PAUSE_TRANSLATE_HOTKEY).catch(() => {});
+  invoke(COMMANDS.PAUSE_HOTKEY_LISTENER).catch(() => {});
+  const btn = el("translate-record");
+  btn.textContent = t("ptt.holdModifier");
+  btn.classList.add("recording");
+}
+
+function stopTranslateRecording() {
+  isRecordingTranslate = false;
+  recordingTranslatePhase = null;
+  capturedTranslateModifier = null;
+  invoke(COMMANDS.RESUME_TRANSLATE_HOTKEY).catch(() => {});
+  invoke(COMMANDS.RESUME_HOTKEY_LISTENER).catch(() => {});
+  const btn = el("translate-record");
+  btn.classList.remove("recording");
+  btn.textContent = displayNameFor(currentTranslateKey);
+}
+
 function handleKeyDown(e) {
-  if (!isRecording) return;
+  if (!isRecording && !isRecordingTranslate) return;
   e.preventDefault();
   e.stopPropagation();
 
   if (e.code === "Escape") {
-    stopRecording();
+    if (isRecording) stopRecording();
+    if (isRecordingTranslate) stopTranslateRecording();
     return;
   }
 
-  if (recordingPhase === "modifier") {
-    if (KEY_MAP[e.code]) {
-      capturedModifier = e.code;
-      recordingPhase = "combo";
-      el("ptt-record").textContent = t("ptt.nowPressKey");
+  if (isRecording) {
+    if (recordingPhase === "modifier") {
+      if (KEY_MAP[e.code]) {
+        capturedModifier = e.code;
+        recordingPhase = "combo";
+        el("ptt-record").textContent = t("ptt.nowPressKey");
+      }
+    } else if (recordingPhase === "combo") {
+      if (REGULAR_KEY_MAP[e.code]) {
+        currentPttKey = capturedModifier + "+" + e.code;
+        stopRecording();
+      }
     }
-  } else if (recordingPhase === "combo") {
-    // Only accept keys that the backend maps (REGULAR_KEY_MAP)
-    if (REGULAR_KEY_MAP[e.code]) {
-      currentPttKey = capturedModifier + "+" + e.code;
-      stopRecording();
+  }
+
+  if (isRecordingTranslate) {
+    if (recordingTranslatePhase === "modifier") {
+      if (KEY_MAP[e.code]) {
+        capturedTranslateModifier = e.code;
+        recordingTranslatePhase = "combo";
+        el("translate-record").textContent = t("ptt.nowPressKey");
+      }
+    } else if (recordingTranslatePhase === "combo") {
+      if (REGULAR_KEY_MAP[e.code]) {
+        currentTranslateKey = capturedTranslateModifier + "+" + e.code;
+        stopTranslateRecording();
+      }
     }
   }
 }
 
 function handleKeyUp(e) {
-  if (!isRecording || recordingPhase !== "combo") return;
-  // Modifier released without a regular key → store modifier only
-  if (e.code === capturedModifier) {
-    currentPttKey = capturedModifier;
-    stopRecording();
+  if (isRecording && recordingPhase === "combo") {
+    if (e.code === capturedModifier) {
+      currentPttKey = capturedModifier;
+      stopRecording();
+    }
+  }
+  if (isRecordingTranslate && recordingTranslatePhase === "combo") {
+    if (e.code === capturedTranslateModifier) {
+      // Translate hotkey must be a combo — don't allow modifier-only
+      stopTranslateRecording();
+    }
   }
 }
 
@@ -260,6 +316,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     el("custom-llm-model").value = s.custom_llm_model || "";
     updateEngineVisibility();
     updateLlmVisibility();
+    setTranslateKey(s.translate_hotkey || "AltLeft+KeyT");
+    el("translate-language").value = s.translate_language || "en";
     // Apply locale
     el("ui-locale").value = s.ui_locale || "en";
     applyLocale(s.ui_locale || "en");
@@ -273,6 +331,15 @@ window.addEventListener("DOMContentLoaded", async () => {
       stopRecording();
     } else {
       startRecording();
+    }
+  });
+
+  el("translate-record").addEventListener("click", () => {
+    if (isRecordingTranslate) {
+      stopTranslateRecording();
+    } else {
+      if (isRecording) stopRecording();
+      startTranslateRecording();
     }
   });
 
@@ -352,6 +419,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       custom_llm_key: el("custom-llm-key").value,
       custom_llm_model: el("custom-llm-model").value,
       ui_locale: el("ui-locale").value,
+      translate_hotkey: currentTranslateKey,
+      translate_language: el("translate-language").value,
     };
 
     try {
