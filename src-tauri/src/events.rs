@@ -23,7 +23,9 @@ pub const STATE_RECORDING: &str = "recording";
 pub const STATE_STOPPING: &str = "stopping";
 pub const STATE_TRANSCRIBING: &str = "transcribing";
 pub const STATE_PROCESSING: &str = "processing";
+pub const STATE_TRANSLATING: &str = "translating";
 
 // --- Transcription output modes ---
 pub const MODE_PASTED: &str = "pasted";
 pub const MODE_CLIPBOARD: &str = "clipboard";
+pub const MODE_TRANSLATED: &str = "translated";

@@ -21,11 +21,13 @@ const RECORDING_STATES = {
   TRANSCRIBING: "transcribing",
   PROCESSING: "processing",
   IDLE: "idle",
+  TRANSLATING: "translating",
 };
 
 const TRANSCRIPTION_MODES = {
   PASTED: "pasted",
   CLIPBOARD: "clipboard",
+  TRANSLATED: "translated",
 };
 
 const COMMANDS = {
@@ -46,5 +48,7 @@ const COMMANDS = {
   COPY_TO_CLIPBOARD: "copy_to_clipboard",
   HIDE_PREVIEW: "hide_preview",
   HIDE_OVERLAY_WINDOWS: "hide_overlay_windows",
+  PAUSE_TRANSLATE_HOTKEY: "pause_translate_hotkey",
+  RESUME_TRANSLATE_HOTKEY: "resume_translate_hotkey",
   COMPLETE_ONBOARDING: "complete_onboarding",
 };
