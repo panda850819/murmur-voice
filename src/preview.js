@@ -79,10 +79,18 @@ function disableEditing() {
   previewText().removeAttribute("contenteditable");
 }
 
+// Performance Optimization: Cache Intl.Segmenter
+// Instantiating Intl objects is expensive. We reuse a single instance
+// for all tokenization calls to significantly speed up word diffing
+// during live transcription/editing.
+let cachedSegmenter = null;
+
 function tokenize(text) {
   if (typeof Intl !== "undefined" && Intl.Segmenter) {
-    const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
-    return [...segmenter.segment(text)]
+    if (!cachedSegmenter) {
+      cachedSegmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+    }
+    return [...cachedSegmenter.segment(text)]
       .filter((s) => s.isWordLike)
       .map((s) => s.segment);
   }
@@ -90,7 +98,9 @@ function tokenize(text) {
 }
 
 function wordDiff(original, edited) {
-  const origSet = new Set(tokenize(original).map((w) => w.toLowerCase()));
+  // Performance Optimization: lower case original text before tokenization
+  // to avoid mapping over tokens which allocates memory and creates array overhead.
+  const origSet = new Set(tokenize(original.toLowerCase()));
   const editWords = tokenize(edited);
   return editWords.filter((w) => !origSet.has(w.toLowerCase()) && w.length >= 2);
 }
