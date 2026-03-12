@@ -168,6 +168,26 @@ fn reset_to_idle(state: &MurmurState, app: &tauri::AppHandle) {
     let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_IDLE);
 }
 
+/// Stop live transcription thread and audio recorder, discarding all captured audio.
+/// Does NOT reset state or emit events — call `reset_to_idle` separately.
+fn cancel_active_recording(state: &MurmurState) {
+    state.live_stop.store(true, Ordering::SeqCst);
+    if let Ok(mut lt) = state.live_thread.lock() {
+        if let Some(handle) = lt.take() {
+            let _ = handle.join();
+        }
+    }
+    if let Ok(mut rec) = state.recorder.lock() {
+        if let Some(recorder) = rec.as_mut() {
+            let _ = recorder.stop();
+        }
+    }
+}
+
+/// Max time between PTT modifier press and translate key press to be considered
+/// a modifier conflict (rather than an intentional recording).
+const MODIFIER_CONFLICT_WINDOW: std::time::Duration = std::time::Duration::from_millis(500);
+
 fn do_translate(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<MurmurState>();
 
@@ -1212,6 +1232,7 @@ pub fn run() {
             std::thread::spawn(move || {
                 let mut is_recording = false;
                 let mut last_toggle: Option<Instant> = None;
+                let mut recording_started_at: Option<Instant> = None;
                 while let Ok(event) = receiver.recv() {
                     if event == hotkey::HotkeyEvent::EventTapFailed {
                         let _ = app_handle.emit(events::ACCESSIBILITY_ERROR, ());
@@ -1265,6 +1286,7 @@ pub fn run() {
                                         match do_start_recording(&app_handle) {
                                             Ok(()) => {
                                                 is_recording = true;
+                                                recording_started_at = Some(Instant::now());
                                             }
                                             Err(e) => {
                                                 log::error!(
@@ -1289,6 +1311,7 @@ pub fn run() {
                                     match do_start_recording(&app_handle) {
                                         Ok(()) => {
                                             is_recording = true;
+                                            recording_started_at = Some(Instant::now());
                                         }
                                         Err(e) => {
                                             log::error!("failed to start recording: {}", e);
@@ -1319,22 +1342,9 @@ pub fn run() {
                                 continue; // Only cancel during active recording
                             }
 
-                            // Stop live transcription
-                            murmur_state.live_stop.store(true, Ordering::SeqCst);
-                            if let Ok(mut lt) = murmur_state.live_thread.lock() {
-                                if let Some(handle) = lt.take() {
-                                    let _ = handle.join();
-                                }
-                            }
-
-                            // Stop audio capture and discard samples
-                            if let Ok(mut recorder_lock) = murmur_state.recorder.lock() {
-                                if let Some(recorder) = recorder_lock.as_mut() {
-                                    let _ = recorder.stop(); // discard samples
-                                }
-                            }
-
+                            cancel_active_recording(&murmur_state);
                             is_recording = false;
+                            recording_started_at = None;
                             reset_to_idle(&murmur_state, &app_handle);
                             let _ = app_handle.emit(events::RECORDING_CANCELLED, ());
 
@@ -1355,11 +1365,32 @@ pub fn run() {
                         hotkey::HotkeyEvent::EventTapFailed => unreachable!(),
                         hotkey::HotkeyEvent::TranslatePressed => {
                             let murmur_state = app_handle.state::<MurmurState>();
-                            // Don't translate while recording or already translating
-                            if murmur_state.app_state.current()
-                                != state::RecordingState::Idle
-                            {
-                                continue;
+                            let current = murmur_state.app_state.current();
+
+                            if current != state::RecordingState::Idle {
+                                // If recording just started within MODIFIER_CONFLICT_WINDOW,
+                                // it's likely a modifier conflict: modifier-only PTT fired
+                                // on the shared modifier before the translate combo completed.
+                                // Cancel the accidental recording and proceed to translate.
+                                let is_modifier_conflict = is_recording
+                                    && matches!(
+                                        current,
+                                        state::RecordingState::Starting
+                                            | state::RecordingState::Recording
+                                    )
+                                    && recording_started_at
+                                        .map(|t| t.elapsed() < MODIFIER_CONFLICT_WINDOW)
+                                        .unwrap_or(false);
+
+                                if !is_modifier_conflict {
+                                    continue; // genuinely busy
+                                }
+
+                                log::info!("translate hotkey: cancelling modifier-conflict recording");
+                                cancel_active_recording(&murmur_state);
+                                is_recording = false;
+                                recording_started_at = None;
+                                reset_to_idle(&murmur_state, &app_handle);
                             }
                             if murmur_state
                                 .translating

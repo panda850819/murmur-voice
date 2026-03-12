@@ -7,6 +7,7 @@ const charCount = () => document.getElementById("char-count");
 const appBadge = () => document.getElementById("app-badge");
 const previewBody = () => document.getElementById("preview-body");
 const copyBtn = () => document.getElementById("copy-btn");
+const closeBtn = () => document.getElementById("close-btn");
 const dictSuggest = () => document.getElementById("dict-suggest");
 const dictChips = () => document.getElementById("dict-chips");
 
@@ -175,6 +176,7 @@ function reset() {
   setAppBadge(null);
   disableEditing();
   copyBtn().classList.add("hidden");
+  closeBtn().classList.add("hidden");
   hideDictSuggest();
   currentMode = null;
   originalText = "";
@@ -214,6 +216,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     } catch (_) {
       // silently fail
     }
+  });
+
+  // Close button handler
+  closeBtn().addEventListener("click", () => {
+    invoke(COMMANDS.HIDE_OVERLAY_WINDOWS).catch(() => {});
   });
 
   // Dict suggestion handlers
@@ -297,6 +304,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         setText("", null);
         setCharCount("");
         copyBtn().classList.add("hidden");
+        closeBtn().classList.add("hidden");
         disableEditing();
         hideDictSuggest();
         break;
@@ -324,6 +332,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       setText(t("preview.noSpeech"), "no-speech");
       setCharCount("");
       copyBtn().classList.add("hidden");
+      closeBtn().classList.add("hidden");
       disableEditing();
     } else {
       setHeader(t("state.done"), false);
@@ -335,6 +344,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       scrollToBottom();
       originalText = text;
       copyBtn().classList.remove("hidden");
+      closeBtn().classList.remove("hidden");
       enableEditing();
 
       // Auto-hide: 3s for pasted mode, 30s for clipboard mode, none for translated

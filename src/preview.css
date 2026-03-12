@@ -163,6 +163,32 @@ html, body {
   border-color: rgba(74, 222, 128, 0.2);
 }
 
+.close-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.close-btn:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 /* -- Editable State -- */
 
 .preview-text[contenteditable="true"] {

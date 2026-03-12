@@ -19,12 +19,14 @@ Hit two bugs during smoke testing: (1) copy_selection didn't work because Option
 
 Also created a `docs-update` skill and registered it to SKM. This skill analyzes git changes and updates README/CHANGELOG before commits. Chained it as upstream of gh-commit and done.
 
+After the initial implementation, bumped version to v0.4.0 and released. Windows CI failed because `Win32_UI_Input_KeyboardAndMouse` feature was missing from the `windows` crate in Cargo.toml — the T5 agent added `GetAsyncKeyState` import but didn't update the feature flags (macOS build doesn't need it). Fixed and re-tagged. Also added a `publish` job to the release workflow so builds auto-publish after completing (previously was draft-only requiring manual publish).
+
 ## Current state
 
-Feature complete and working. 15 commits on main, 45/45 tests pass, clippy clean. READMEs updated (EN + zh-TW). Not yet version-bumped or released.
+v0.4.0 released and tagged. Release workflow re-running with the Cargo.toml fix. CI green on macOS, Windows should pass now with the feature flag fix. Auto-publish job added to release.yml.
 
 ## Follow-ups
 
-- [ ] Version bump (0.3.8?) and release
+- [ ] Verify v0.4.0 release assets appear after CI completes
 - [ ] Test on Windows (hotkey detection uses GetAsyncKeyState for translate key)
 - [ ] Consider auto-detect + reverse translation (zh<->en) as future enhancement
