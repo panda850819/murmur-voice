@@ -136,6 +136,32 @@ html, body {
   align-items: center;
 }
 
+.translate-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.translate-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.translate-btn:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.translate-btn.translating {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .copy-btn {
   background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.8);

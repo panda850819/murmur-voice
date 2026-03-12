@@ -88,9 +88,19 @@ CRITICAL: Output ONLY the cleaned transcription. Nothing else. No explanations, 
 // --- English word protection for mixed-language text ---
 
 /// Returns true if the text contains CJK characters.
-fn has_cjk(text: &str) -> bool {
+pub(crate) fn has_cjk(text: &str) -> bool {
     text.chars()
         .any(|c| matches!(c as u32, 0x4E00..=0x9FFF | 0x3400..=0x4DBF | 0xF900..=0xFAFF))
+}
+
+/// Auto-detect target language based on text content.
+/// CJK text → translate to English; otherwise → translate to Chinese.
+pub(crate) fn detect_target_language(text: &str) -> &'static str {
+    if has_cjk(text) {
+        "en"
+    } else {
+        "zh"
+    }
 }
 
 /// In mixed CJK+English text, replaces English words with numbered placeholders
@@ -764,5 +774,19 @@ mod tests {
             ..Default::default()
         };
         assert!(create_translator(&s).is_none());
+    }
+
+    #[test]
+    fn test_detect_target_language() {
+        // CJK text → English
+        assert_eq!(detect_target_language("你好世界"), "en");
+        assert_eq!(detect_target_language("這是一段中文"), "en");
+        // Mixed CJK+English → English (has CJK)
+        assert_eq!(detect_target_language("Hello 你好"), "en");
+        // Pure English → Chinese
+        assert_eq!(detect_target_language("Hello World"), "zh");
+        assert_eq!(detect_target_language("This is a test."), "zh");
+        // Numbers only → Chinese (no CJK)
+        assert_eq!(detect_target_language("12345"), "zh");
     }
 }

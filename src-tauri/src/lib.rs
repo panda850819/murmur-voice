@@ -210,8 +210,9 @@ fn do_translate(app: &tauri::AppHandle) -> Result<(), String> {
     let translator = llm::create_translator(&settings)
         .ok_or("Enable AI Processing provider in Settings to use translation")?;
 
-    // 6. Translate via LLM
-    let translated = translator.translate(&text, &settings.translate_language)
+    // 6. Translate via LLM (auto-detect direction)
+    let target = llm::detect_target_language(&text);
+    let translated = translator.translate(&text, target)
         .map_err(|e| e.to_string())?;
 
     // 7. Write to clipboard and paste (clipboard retains translated text)
@@ -650,12 +651,12 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         serde_json::json!({ "text": text, "mode": output_mode }),
     );
 
-    // Auto-hide main window 3s after transcription complete
+    // Auto-hide main window 8s after transcription complete
     {
         let app_hide = app.clone();
         let gen = state.preview_generation.load(Ordering::SeqCst);
         std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_secs(3));
+            std::thread::sleep(std::time::Duration::from_secs(8));
             let ms = app_hide.state::<MurmurState>();
             // Cancel if a new recording started (generation changed) or user manually showed
             if ms.preview_generation.load(Ordering::SeqCst) == gen
@@ -882,6 +883,22 @@ fn copy_to_clipboard(text: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn translate_text(text: String, app: tauri::AppHandle) -> Result<String, String> {
+    let state = app.state::<MurmurState>();
+    let settings = state
+        .settings
+        .lock()
+        .map_err(|e| format!("settings mutex poisoned: {e}"))?
+        .clone();
+    let translator = llm::create_translator(&settings)
+        .ok_or("Enable AI Processing provider in Settings to use translation")?;
+    let target = llm::detect_target_language(&text);
+    let translated = translator.translate(&text, target).map_err(|e| e.to_string())?;
+    clipboard::copy_only(&translated).map_err(|e| e.to_string())?;
+    Ok(translated)
+}
+
+#[tauri::command]
 fn check_accessibility() -> bool {
     is_accessibility_trusted()
 }
@@ -1041,6 +1058,7 @@ pub fn run() {
             hide_overlay_windows,
             complete_onboarding,
             copy_to_clipboard,
+            translate_text,
             pause_hotkey_listener,
             resume_hotkey_listener,
             pause_translate_hotkey,

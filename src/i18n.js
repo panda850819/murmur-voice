@@ -112,6 +112,8 @@ const I18N = {
     "hint.translateProvider": "Uses the AI provider configured above",
     "state.translating": "Translating...",
     "state.translated": "Translated",
+    "preview.translate": "Translate",
+    "preview.translating": "Translating...",
   },
   "zh-TW": {
     "header.title": "偏好設定",
@@ -222,6 +224,8 @@ const I18N = {
     "hint.translateProvider": "使用上方設定的 AI 供應商",
     "state.translating": "翻譯中...",
     "state.translated": "已翻譯",
+    "preview.translate": "翻譯",
+    "preview.translating": "翻譯中...",
   },
 };
 

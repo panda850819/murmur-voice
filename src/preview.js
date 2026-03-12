@@ -8,6 +8,7 @@ const appBadge = () => document.getElementById("app-badge");
 const previewBody = () => document.getElementById("preview-body");
 const copyBtn = () => document.getElementById("copy-btn");
 const closeBtn = () => document.getElementById("close-btn");
+const translateBtn = () => document.getElementById("translate-btn");
 const dictSuggest = () => document.getElementById("dict-suggest");
 const dictChips = () => document.getElementById("dict-chips");
 
@@ -177,6 +178,7 @@ function reset() {
   disableEditing();
   copyBtn().classList.add("hidden");
   closeBtn().classList.add("hidden");
+  translateBtn().classList.add("hidden");
   hideDictSuggest();
   currentMode = null;
   originalText = "";
@@ -221,6 +223,35 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Close button handler
   closeBtn().addEventListener("click", () => {
     invoke(COMMANDS.HIDE_OVERLAY_WINDOWS).catch(() => {});
+  });
+
+  // Translate button handler
+  translateBtn().addEventListener("click", async () => {
+    const btn = translateBtn();
+    const text = previewText().textContent;
+    if (!text || text.trim().length === 0) return;
+
+    btn.textContent = t("preview.translating");
+    btn.classList.add("translating");
+    btn.disabled = true;
+    setHeader(t("state.translating"), true);
+    clearAutoHide();
+
+    try {
+      const translated = await invoke(COMMANDS.TRANSLATE_TEXT, { text });
+      setText(translated, null);
+      setCharCount(translated);
+      scrollToBottom();
+      setHeader(t("state.translated"), false);
+      btn.classList.add("hidden");
+      currentMode = TRANSCRIPTION_MODES.TRANSLATED;
+    } catch (e) {
+      setHeader(t("state.error"), false);
+      btn.textContent = t("preview.translate");
+      btn.classList.remove("translating");
+      btn.disabled = false;
+      console.error("translate_text failed:", e);
+    }
   });
 
   // Dict suggestion handlers
@@ -275,7 +306,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         try {
           await invoke(COMMANDS.HIDE_OVERLAY_WINDOWS);
         } catch (_) {}
-      }, 3000);
+      }, 8000);
     }
   });
 
@@ -305,6 +336,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         setCharCount("");
         copyBtn().classList.add("hidden");
         closeBtn().classList.add("hidden");
+        translateBtn().classList.add("hidden");
         disableEditing();
         hideDictSuggest();
         break;
@@ -345,11 +377,19 @@ window.addEventListener("DOMContentLoaded", async () => {
       originalText = text;
       copyBtn().classList.remove("hidden");
       closeBtn().classList.remove("hidden");
+      if (mode === TRANSCRIPTION_MODES.PASTED || mode === TRANSCRIPTION_MODES.CLIPBOARD) {
+        translateBtn().classList.remove("hidden");
+        translateBtn().disabled = false;
+        translateBtn().classList.remove("translating");
+        translateBtn().textContent = t("preview.translate");
+      } else {
+        translateBtn().classList.add("hidden");
+      }
       enableEditing();
 
-      // Auto-hide: 3s for pasted mode, 30s for clipboard mode, none for translated
+      // Auto-hide: 8s for pasted mode, 30s for clipboard mode, none for translated
       if (text && text.trim().length > 0 && mode !== TRANSCRIPTION_MODES.TRANSLATED) {
-        const delay = mode === TRANSCRIPTION_MODES.PASTED ? 3000 : 30000;
+        const delay = mode === TRANSCRIPTION_MODES.PASTED ? 8000 : 30000;
         autoHideTimer = setTimeout(async () => {
           try {
             await invoke(COMMANDS.HIDE_OVERLAY_WINDOWS);
