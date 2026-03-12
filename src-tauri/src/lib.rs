@@ -711,6 +711,14 @@ async fn check_for_updates() -> Result<UpdateCheckResult, String> {
 
 #[tauri::command]
 async fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    // Security: Only allow safe URI schemes to prevent arbitrary command execution or file access
+    if !url.starts_with("http://")
+        && !url.starts_with("https://")
+        && !url.starts_with("x-apple.systempreferences:")
+    {
+        return Err("Blocked attempt to open unsafe URL scheme".to_string());
+    }
+
     use tauri_plugin_opener::OpenerExt;
     app.opener()
         .open_url(&url, None::<&str>)
