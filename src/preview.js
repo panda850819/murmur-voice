@@ -81,9 +81,16 @@ function disableEditing() {
   previewText().removeAttribute("contenteditable");
 }
 
+// ⚡ Bolt Optimization: Cache the segmenter globally.
+// Instantiating Intl.Segmenter is expensive. Reusing it across calls
+// significantly speeds up continuous real-time tokenization during typing.
+let segmenter = null;
+
 function tokenize(text) {
   if (typeof Intl !== "undefined" && Intl.Segmenter) {
-    const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+    if (!segmenter) {
+      segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+    }
     return [...segmenter.segment(text)]
       .filter((s) => s.isWordLike)
       .map((s) => s.segment);
@@ -92,7 +99,9 @@ function tokenize(text) {
 }
 
 function wordDiff(original, edited) {
-  const origSet = new Set(tokenize(original).map((w) => w.toLowerCase()));
+  // ⚡ Bolt Optimization: Lowercase the entire string before tokenization
+  // to avoid mapping over intermediate arrays, skipping unnecessary allocations.
+  const origSet = new Set(tokenize(original.toLowerCase()));
   const editWords = tokenize(edited);
   return editWords.filter((w) => !origSet.has(w.toLowerCase()) && w.length >= 2);
 }
