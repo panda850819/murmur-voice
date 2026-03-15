@@ -81,10 +81,14 @@ function disableEditing() {
   previewText().removeAttribute("contenteditable");
 }
 
+// Cache segmenter to avoid expensive re-instantiation on every keystroke
+const SEGMENTER = typeof Intl !== "undefined" && Intl.Segmenter
+  ? new Intl.Segmenter(undefined, { granularity: "word" })
+  : null;
+
 function tokenize(text) {
-  if (typeof Intl !== "undefined" && Intl.Segmenter) {
-    const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
-    return [...segmenter.segment(text)]
+  if (SEGMENTER) {
+    return [...SEGMENTER.segment(text)]
       .filter((s) => s.isWordLike)
       .map((s) => s.segment);
   }
@@ -92,7 +96,8 @@ function tokenize(text) {
 }
 
 function wordDiff(original, edited) {
-  const origSet = new Set(tokenize(original).map((w) => w.toLowerCase()));
+  // Optimization: Lowercase entire string before tokenization to avoid creating and mapping an intermediate array
+  const origSet = new Set(tokenize(original.toLowerCase()));
   const editWords = tokenize(edited);
   return editWords.filter((w) => !origSet.has(w.toLowerCase()) && w.length >= 2);
 }
