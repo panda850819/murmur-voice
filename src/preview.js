@@ -20,6 +20,10 @@ let addedWords = new Set();
 let dismissedWords = new Set();
 let debounceTimer = null;
 
+// Performance Optimization: Cache Intl.Segmenter globally since instantiation is computationally expensive
+// and tokenize() is called frequently during real-time typing/diffing.
+let segmenterInstance = null;
+
 function setHeader(text, processing) {
   const el = headerText();
   if (dotsInterval) {
@@ -83,8 +87,10 @@ function disableEditing() {
 
 function tokenize(text) {
   if (typeof Intl !== "undefined" && Intl.Segmenter) {
-    const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
-    return [...segmenter.segment(text)]
+    if (!segmenterInstance) {
+      segmenterInstance = new Intl.Segmenter(undefined, { granularity: "word" });
+    }
+    return [...segmenterInstance.segment(text)]
       .filter((s) => s.isWordLike)
       .map((s) => s.segment);
   }
@@ -92,7 +98,9 @@ function tokenize(text) {
 }
 
 function wordDiff(original, edited) {
-  const origSet = new Set(tokenize(original).map((w) => w.toLowerCase()));
+  // Performance Optimization: Apply toLowerCase() to the entire original string prior to tokenization
+  // to avoid mapping over intermediate arrays, which reduces memory allocation.
+  const origSet = new Set(tokenize(original.toLowerCase()));
   const editWords = tokenize(edited);
   return editWords.filter((w) => !origSet.has(w.toLowerCase()) && w.length >= 2);
 }
