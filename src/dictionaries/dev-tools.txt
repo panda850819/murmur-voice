@@ -1,0 +1,30 @@
+GitHub, GitLab, Bitbucket, git, repo, repository
+pull request, PR, merge request, MR, code review
+CI/CD, continuous integration, continuous deployment
+Docker, container, Kubernetes, K8s
+AWS, Azure, GCP, cloud, serverless
+Lambda, EC2, S3, CloudFront, CDN
+Vercel, Netlify, Cloudflare, Supabase
+PostgreSQL, Postgres, MySQL, MongoDB, Redis
+SQL, NoSQL, database, schema, migration
+TypeScript, JavaScript, Node.js, Deno, Bun
+React, Next.js, Vue, Svelte, Nuxt
+Tailwind, CSS, HTML, DOM, SSR, SSG
+Rust, Cargo, crate, Tauri
+Python, pip, conda, venv, virtualenv
+Go, Golang, goroutine
+Swift, SwiftUI, Xcode, iOS, macOS
+Kotlin, Android, JVM, Gradle
+npm, pnpm, yarn, package manager
+webpack, Vite, esbuild, Turbopack
+ESLint, Prettier, linter, formatter
+Jest, Vitest, pytest, unit test, integration test
+REST API, GraphQL, WebSocket, gRPC
+JSON, YAML, TOML, XML, Markdown
+OAuth, JWT, authentication, authorization
+environment variable, env, dotenv
+localhost, port, proxy, reverse proxy
+DNS, SSL, TLS, HTTPS, certificate
+SSH, terminal, CLI, command line
+IDE, VS Code, Cursor, Neovim, Vim
+Linux, Ubuntu, Homebrew, shell, bash, zsh

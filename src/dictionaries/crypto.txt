@@ -1,0 +1,41 @@
+Bitcoin, BTC, Ethereum, ETH, Solana, SOL
+USDT, USDC, stablecoin, stablecoins
+blockchain, block chain, on-chain, off-chain
+DeFi, CeFi, DEX, CEX, AMM
+NFT, NFTs, ERC-20, ERC-721, ERC-1155
+smart contract, smart contracts
+Layer 1, Layer 2, L1, L2, rollup, rollups
+ZK, zero-knowledge, zk-SNARK, zk-STARK, ZKP
+proof of work, proof of stake, PoW, PoS
+consensus, validator, validators, staking
+gas fee, gas fees, gwei, wei
+wallet, wallets, MetaMask, Phantom, Ledger
+seed phrase, private key, public key
+airdrop, airdrops, token, tokens, tokenomics
+liquidity, liquidity pool, LP, TVL
+yield farming, yield, APY, APR
+impermanent loss, slippage
+DAO, DAOs, governance, governance token
+bridge, cross-chain, interoperability
+oracle, oracles, Chainlink
+MEV, front-running, sandwich attack
+HODL, FUD, FOMO, DYOR, NFA
+bull market, bear market, altcoin, altcoins
+market cap, circulating supply, total supply
+whitepaper, roadmap, testnet, mainnet
+halving, mining, miner, hash rate
+DApp, DApps, Web3, web3
+Uniswap, Aave, Compound, MakerDAO, Maker
+Polygon, Arbitrum, Optimism, Base, zkSync
+Cosmos, Polkadot, Avalanche, AVAX
+Binance, Coinbase, OKX, Bybit, Kraken
+perpetual, perp, perps, futures, spot
+leverage, margin, liquidation, funding rate
+order book, limit order, market order
+RSI, MACD, moving average, Bollinger Bands
+support, resistance, breakout, pullback
+candlestick, volume, open interest
+long, short, position, PnL
+whale, whales, accumulation, distribution
+KOL, alpha, degen, rug pull, rug
+memecoin, memecoins, Dogecoin, DOGE, Pepe

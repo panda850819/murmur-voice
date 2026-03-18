@@ -133,7 +133,7 @@ unsafe extern "C" fn event_tap_callback(
         let keycode = CGEventGetIntegerValueField(event, K_CG_KEYBOARD_EVENT_KEYCODE) as u32;
         if keycode == tr_key {
             let flags = CGEventGetFlags(event);
-            if (flags & tr_modifier) != 0 {
+            if (flags & tr_modifier) == tr_modifier {
                 let _ = sender.send(HotkeyEvent::TranslatePressed);
                 return std::ptr::null_mut(); // consume the key event
             }

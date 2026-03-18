@@ -86,16 +86,23 @@ unsafe extern "system" fn keyboard_hook_proc(
             // Pass through to other apps (don't return early with LRESULT(1))
         }
 
-        // Translate hotkey detection — always a combo (modifier+key)
-        let tr_modifier_vk = TRANSLATE_MODIFIER_MASK.load(Ordering::SeqCst) as u32;
+        // Translate hotkey detection — always a combo (modifier(s)+key)
+        let tr_modifier_packed = TRANSLATE_MODIFIER_MASK.load(Ordering::SeqCst);
         let tr_regular_vk = TRANSLATE_REGULAR_KEY.load(Ordering::SeqCst);
-        if tr_regular_vk != 0 && tr_modifier_vk != 0 {
+        if tr_regular_vk != 0 && tr_modifier_packed != 0 {
             if let Some(ref sender) = GLOBAL_SENDER {
                 if kb.vkCode == tr_regular_vk && is_down {
-                    let mod_held = unsafe {
-                        GetAsyncKeyState(tr_modifier_vk as i32) < 0
-                    };
-                    if mod_held {
+                    // Check all packed modifier VK codes (16-bit slots)
+                    let mut all_mods_held = true;
+                    for i in 0..4u32 {
+                        let vk = ((tr_modifier_packed >> (i * 16)) & 0xFFFF) as i32;
+                        if vk == 0 { break; }
+                        if unsafe { GetAsyncKeyState(vk) } >= 0 {
+                            all_mods_held = false;
+                            break;
+                        }
+                    }
+                    if all_mods_held {
                         let _ = sender.send(HotkeyEvent::TranslatePressed);
                         return LRESULT(1); // consume the key event
                     }

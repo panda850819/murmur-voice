@@ -1,0 +1,43 @@
+AI, artificial intelligence, machine learning, ML
+deep learning, neural network, neural networks
+LLM, large language model, language model
+GPT, GPT-4, ChatGPT, OpenAI
+Claude, Anthropic, Sonnet, Opus, Haiku
+Gemini, Google, Llama, Meta, Mistral
+transformer, transformers, attention mechanism
+self-attention, multi-head attention
+embedding, embeddings, vector, vectors
+token, tokens, tokenizer, tokenization
+prompt, prompts, prompt engineering
+fine-tuning, fine-tune, RLHF, DPO, PPO
+RAG, retrieval-augmented generation
+context window, context length
+inference, latency, throughput
+parameter, parameters, weights, bias
+gradient, gradient descent, backpropagation
+loss function, cross-entropy, softmax
+batch size, learning rate, epoch, epochs
+overfitting, underfitting, regularization
+dropout, batch normalization, layer normalization
+CNN, convolutional neural network
+RNN, recurrent neural network, LSTM, GRU
+GAN, generative adversarial network
+diffusion model, Stable Diffusion, DALL-E, Midjourney
+computer vision, image recognition, object detection
+NLP, natural language processing
+sentiment analysis, named entity recognition, NER
+text-to-speech, TTS, speech-to-text, STT, ASR
+Whisper, transcription, voice recognition
+PyTorch, TensorFlow, JAX, Hugging Face
+CUDA, GPU, VRAM, tensor, tensors
+API, endpoint, REST, GraphQL
+model serving, ONNX, TensorRT, quantization
+int8, int4, fp16, bf16, mixed precision
+MCP, model context protocol
+tool use, function calling, agentic
+agent, agents, multi-agent, autonomous
+chain of thought, CoT, reasoning
+benchmark, eval, evaluation, leaderboard
+MMLU, HumanEval, BLEU, perplexity
+hallucination, grounding, factuality
+alignment, safety, guardrails, red teaming

@@ -11,7 +11,8 @@ const MIN_SAMPLES: usize = 3_200; // 0.2s at 16kHz
 pub(crate) const MIN_TRANSCRIBE_SAMPLES: usize = 16_000;
 
 /// Energy threshold below which audio is considered silent.
-const SILENCE_ENERGY_THRESHOLD: f32 = 1e-6;
+/// Typical background noise sits around 1e-5 to 1e-4; speech is usually above 1e-3.
+const SILENCE_ENERGY_THRESHOLD: f32 = 5e-5;
 
 /// Opens the default audio input device and returns it with its default stream config.
 /// Returns `None` if no input device is available or its config cannot be queried.

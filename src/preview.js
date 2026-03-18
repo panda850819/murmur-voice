@@ -346,6 +346,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+  await listen(EVENTS.RECORDING_CANCELLED, () => {
+    reset();
+  });
+
   await listen(EVENTS.PARTIAL_TRANSCRIPTION, (event) => {
     const text = event.payload;
     if (text) {

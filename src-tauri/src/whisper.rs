@@ -3,6 +3,11 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 
 use crate::audio;
 
+/// Segment no-speech probability above this → skip segment (also passed to whisper params).
+const NO_SPEECH_THRESHOLD: f32 = 0.6;
+/// Minimum average token probability to accept a transcription result.
+const CONFIDENCE_THRESHOLD: f64 = 0.4;
+
 fn calculate_threads(available: usize) -> i32 {
     if available <= 4 {
         // Use all available threads if count is low (but at least 1)
@@ -103,7 +108,7 @@ impl TranscriptionEngine {
 
         // Anti-hallucination settings
         params.set_suppress_blank(true);
-        params.set_no_speech_thold(0.6);
+        params.set_no_speech_thold(NO_SPEECH_THRESHOLD);
         params.set_temperature_inc(0.0); // disable temperature fallback — it just produces more hallucinations
         params.set_entropy_thold(2.4);   // reject segments with high entropy (uncertain/hallucinated)
 
@@ -117,8 +122,26 @@ impl TranscriptionEngine {
 
         let n_segments = state.full_n_segments();
         let mut text = String::new();
+        let mut total_token_prob = 0.0f64;
+        let mut total_tokens = 0usize;
+
         for i in 0..n_segments {
             if let Some(segment) = state.get_segment(i) {
+                let no_speech = segment.no_speech_probability();
+                if no_speech > NO_SPEECH_THRESHOLD {
+                    log::info!("skipping segment {i} with high no_speech_prob ({no_speech:.3})");
+                    continue;
+                }
+
+                // Accumulate token probabilities for confidence scoring
+                let n_tokens = segment.n_tokens();
+                for t in 0..n_tokens {
+                    if let Some(token) = segment.get_token(t as std::ffi::c_int) {
+                        total_token_prob += token.token_probability() as f64;
+                        total_tokens += 1;
+                    }
+                }
+
                 let segment_text = segment
                     .to_str()
                     .map_err(|e: whisper_rs::WhisperError| {
@@ -128,8 +151,69 @@ impl TranscriptionEngine {
             }
         }
 
-        Ok(text.trim().to_string())
+        let trimmed = text.trim().to_string();
+
+        // Confidence gate: reject if average token probability is too low
+        if total_tokens > 0 {
+            let avg_prob = total_token_prob / total_tokens as f64;
+            log::info!("transcription confidence: avg_token_prob={avg_prob:.4}, tokens={total_tokens}, text={trimmed:?}");
+            if avg_prob < CONFIDENCE_THRESHOLD {
+                log::info!("rejected low-confidence transcription (avg_prob={avg_prob:.4})");
+                return Ok(String::new());
+            }
+        }
+
+        // Filter known Whisper hallucination patterns (common when no speech is present)
+        if is_hallucination(&trimmed) {
+            log::info!("filtered hallucinated text: {trimmed:?}");
+            return Ok(String::new());
+        }
+
+        Ok(trimmed)
     }
+}
+
+/// Common Whisper hallucination phrases that appear when no real speech is present.
+const HALLUCINATION_PATTERNS: &[&str] = &[
+    "thank you for watching",
+    "thanks for watching",
+    "please subscribe",
+    "like and subscribe",
+    "see you next time",
+    "see you in the next",
+    "goodbye",
+    "thank you for listening",
+    "thanks for listening",
+    "subtitles by",
+    "translated by",
+    "amara.org",
+    "www.",
+    "http",
+    // CJK common hallucinations
+    "謝謝觀看",
+    "感謝觀看",
+    "感謝收看",
+    "請訂閱",
+    "字幕",
+    "谢谢观看",
+    "感谢观看",
+    "请订阅",
+    "ご視聴ありがとうございました",
+];
+
+fn is_hallucination(text: &str) -> bool {
+    if text.is_empty() {
+        return false;
+    }
+    let lower = text.to_lowercase();
+    let trimmed = lower.trim_matches(|c: char| c.is_whitespace() || c == '.' || c == '!' || c == ',');
+    // Reject if only punctuation/whitespace remains after trimming
+    if trimmed.is_empty() || trimmed.chars().all(|c| !c.is_alphanumeric()) {
+        return true;
+    }
+    HALLUCINATION_PATTERNS
+        .iter()
+        .any(|pat| trimmed.contains(pat))
 }
 
 #[cfg(test)]
@@ -160,5 +244,19 @@ mod tests {
                 input
             );
         }
+    }
+
+    #[test]
+    fn test_hallucination_filter() {
+        assert!(is_hallucination("Thank you for watching."));
+        assert!(is_hallucination("謝謝觀看"));
+        assert!(is_hallucination("  thanks for watching!  "));
+        assert!(is_hallucination("Subtitles by Amara.org"));
+        assert!(is_hallucination("...")); // only punctuation after trim
+        assert!(!is_hallucination("好")); // valid CJK single char
+        assert!(!is_hallucination("OK")); // valid short word
+        assert!(!is_hallucination("Hello, how are you today?"));
+        assert!(!is_hallucination("The meeting is at 3pm"));
+        assert!(!is_hallucination("")); // empty is not hallucination (handled elsewhere)
     }
 }

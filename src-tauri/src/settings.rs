@@ -3,43 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-fn default_hold() -> String {
-    "hold".to_string()
-}
-
-fn default_llm_model() -> String {
-    "llama-3.3-70b-versatile".to_string()
-}
-
-fn default_true() -> bool {
-    true
-}
-
-fn default_groq() -> String {
-    "groq".to_string()
-}
-
-fn default_ollama_url() -> String {
-    "http://localhost:11434".to_string()
-}
-
-fn default_ollama_model() -> String {
-    "llama3.2".to_string()
-}
-
-fn default_en() -> String {
-    "en".to_string()
-}
-
-fn default_translate_hotkey() -> String {
-    "AltLeft+KeyT".to_string()
-}
-
-fn default_translate_language() -> String {
-    "en".to_string()
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub(crate) struct Settings {
     pub ptt_key: String,
     pub language: String,
@@ -48,36 +14,22 @@ pub(crate) struct Settings {
     pub groq_api_key: String,
     pub window_opacity: f64,
     pub auto_start: bool,
-    #[serde(default)]
     pub onboarding_complete: bool,
-    #[serde(default = "default_hold")]
     pub recording_mode: String,
-    #[serde(default)]
     pub dictionary: String,
-    #[serde(default)]
     pub llm_enabled: bool,
-    #[serde(default = "default_llm_model")]
     pub llm_model: String,
-    #[serde(default = "default_groq")]
     pub llm_provider: String,
-    #[serde(default = "default_ollama_url")]
     pub ollama_url: String,
-    #[serde(default = "default_ollama_model")]
     pub ollama_model: String,
-    #[serde(default)]
     pub custom_llm_url: String,
-    #[serde(default)]
     pub custom_llm_key: String,
-    #[serde(default)]
     pub custom_llm_model: String,
-    #[serde(default = "default_true")]
     pub app_aware_style: bool,
-    #[serde(default = "default_en")]
     pub ui_locale: String,
-    #[serde(default = "default_translate_hotkey")]
     pub translate_hotkey: String,
-    #[serde(default = "default_translate_language")]
     pub translate_language: String,
+    pub dictionary_packs: Vec<String>,
 }
 
 /// Target for PTT key matching — supports single modifier or modifier+key combos.
@@ -101,34 +53,65 @@ impl Default for Settings {
             recording_mode: "hold".to_string(),
             dictionary: String::new(),
             llm_enabled: false,
-            llm_model: default_llm_model(),
-            llm_provider: default_groq(),
-            ollama_url: default_ollama_url(),
-            ollama_model: default_ollama_model(),
+            llm_model: "llama-3.3-70b-versatile".to_string(),
+            llm_provider: "groq".to_string(),
+            ollama_url: "http://localhost:11434".to_string(),
+            ollama_model: "llama3.2".to_string(),
             custom_llm_url: String::new(),
             custom_llm_key: String::new(),
             custom_llm_model: String::new(),
             app_aware_style: true,
-            ui_locale: default_en(),
-            translate_hotkey: default_translate_hotkey(),
-            translate_language: default_translate_language(),
+            ui_locale: "en".to_string(),
+            translate_hotkey: "AltLeft+KeyT".to_string(),
+            translate_language: "en".to_string(),
+            dictionary_packs: Vec::new(),
         }
     }
 }
 
 pub(crate) fn parse_hotkey(key: &str) -> PttKeyTarget {
-    if let Some(plus_pos) = key.find('+') {
-        let modifier_str = &key[..plus_pos];
-        let key_str = &key[plus_pos + 1..];
-        PttKeyTarget {
-            modifier_mask: modifier_mask_for(modifier_str),
-            regular_key: keycode_for_code(key_str),
+    let parts: Vec<&str> = key.split('+').collect();
+    if parts.len() >= 2 {
+        let last = *parts.last().unwrap();
+        let regular_key = keycode_for_code(last);
+        if regular_key != 0 {
+            // Last part is a regular key; all preceding parts are modifiers
+            let combined_mask = combine_modifier_masks(&parts[..parts.len() - 1]);
+            PttKeyTarget {
+                modifier_mask: combined_mask,
+                regular_key,
+            }
+        } else {
+            // No regular key recognized — treat first part as modifier-only
+            PttKeyTarget {
+                modifier_mask: modifier_mask_for(parts[0]),
+                regular_key: 0,
+            }
         }
     } else {
         PttKeyTarget {
             modifier_mask: modifier_mask_for(key),
             regular_key: 0,
         }
+    }
+}
+
+/// Combine multiple modifier masks into a single u64.
+/// macOS: bitwise OR of CGEventFlags device-dependent bits.
+/// Windows: pack VK codes into 16-bit slots (up to 4 modifiers).
+fn combine_modifier_masks(modifiers: &[&str]) -> u64 {
+    #[cfg(target_os = "macos")]
+    {
+        modifiers
+            .iter()
+            .fold(0u64, |acc, &m| acc | modifier_mask_for(m))
+    }
+    #[cfg(target_os = "windows")]
+    {
+        debug_assert!(modifiers.len() <= 4, "Windows supports max 4 modifiers");
+        modifiers.iter().enumerate().fold(0u64, |acc, (i, &m)| {
+            acc | (modifier_mask_for(m) << (i * 16))
+        })
     }
 }
 
@@ -164,7 +147,8 @@ impl Settings {
         }
     }
 
-    /// Builds the full initial_prompt for Whisper, combining language bias and user dictionary.
+    /// Builds the full initial_prompt for Whisper, combining language bias,
+    /// enabled dictionary packs, and user custom dictionary.
     pub fn whisper_initial_prompt(&self) -> String {
         let mut parts = Vec::new();
 
@@ -173,11 +157,38 @@ impl Settings {
             parts.push("繁體中文語音轉錄，使用台灣正體中文。".to_string());
         }
 
+        // Append enabled dictionary pack terms
+        for pack in &self.dictionary_packs {
+            if let Some(content) = dict_pack_content(pack) {
+                // Flatten file content into comma-separated terms on one line
+                let terms: String = content
+                    .lines()
+                    .flat_map(|line| line.split(','))
+                    .map(|t| t.trim())
+                    .filter(|t| !t.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                if !terms.is_empty() {
+                    parts.push(terms);
+                }
+            }
+        }
+
         if !self.dictionary.is_empty() {
             parts.push(self.dictionary.clone());
         }
 
         parts.join(" ")
+    }
+}
+
+/// Returns the embedded content of a built-in dictionary pack.
+fn dict_pack_content(name: &str) -> Option<&'static str> {
+    match name {
+        "crypto" => Some(include_str!("../../src/dictionaries/crypto.txt")),
+        "ai-ml" => Some(include_str!("../../src/dictionaries/ai-ml.txt")),
+        "dev-tools" => Some(include_str!("../../src/dictionaries/dev-tools.txt")),
+        _ => None,
     }
 }
 
@@ -312,7 +323,13 @@ fn settings_path(base: &Path) -> PathBuf {
 pub(crate) fn load_settings(base: &Path) -> Settings {
     let path = settings_path(base);
     match std::fs::read_to_string(&path) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+        Ok(content) => match serde_json::from_str(&content) {
+            Ok(settings) => settings,
+            Err(e) => {
+                log::error!("failed to parse settings.json, using defaults: {e}");
+                Settings::default()
+            }
+        },
         Err(_) => Settings::default(),
     }
 }
@@ -552,5 +569,18 @@ mod tests {
         let t = s.translate_key_target();
         assert_ne!(t.modifier_mask, 0);
         assert_ne!(t.regular_key, 0);
+    }
+
+    #[test]
+    fn test_parse_hotkey_multi_modifier() {
+        // MetaLeft+ShiftLeft+KeyT → two modifiers + regular key
+        let t = parse_hotkey("MetaLeft+ShiftLeft+KeyT");
+        assert_ne!(t.regular_key, 0); // T key
+        assert_ne!(t.modifier_mask, 0);
+
+        // Combined mask should differ from single modifier
+        let single = parse_hotkey("MetaLeft+KeyT");
+        assert_ne!(t.modifier_mask, single.modifier_mask);
+        assert_eq!(t.regular_key, single.regular_key); // same regular key
     }
 }

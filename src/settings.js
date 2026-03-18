@@ -50,17 +50,14 @@ let undoTimer = null;
 let undoEntry = null; // { term, index }
 let currentTranslateKey = "AltLeft+KeyT";
 let isRecordingTranslate = false;
-let recordingTranslatePhase = null;
-let capturedTranslateModifier = null;
+let capturedTranslateModifiers = new Set();
 
 const el = (id) => document.getElementById(id);
 
 function displayNameFor(code) {
   if (code && code.includes("+")) {
-    const [mod, key] = code.split("+");
-    const modName = KEY_MAP[mod] || LEGACY_DISPLAY[mod] || mod;
-    const keyName = REGULAR_KEY_MAP[key] || key;
-    return modName + " + " + keyName;
+    const parts = code.split("+");
+    return parts.map(p => KEY_MAP[p] || REGULAR_KEY_MAP[p] || LEGACY_DISPLAY[p] || p).join(" + ");
   }
   return KEY_MAP[code] || LEGACY_DISPLAY[code] || code;
 }
@@ -99,8 +96,7 @@ function setTranslateKey(code) {
 
 function startTranslateRecording() {
   isRecordingTranslate = true;
-  recordingTranslatePhase = "modifier";
-  capturedTranslateModifier = null;
+  capturedTranslateModifiers.clear();
   invoke(COMMANDS.PAUSE_TRANSLATE_HOTKEY).catch(() => {});
   invoke(COMMANDS.PAUSE_HOTKEY_LISTENER).catch(() => {});
   const btn = el("translate-record");
@@ -110,8 +106,7 @@ function startTranslateRecording() {
 
 function stopTranslateRecording() {
   isRecordingTranslate = false;
-  recordingTranslatePhase = null;
-  capturedTranslateModifier = null;
+  capturedTranslateModifiers.clear();
   invoke(COMMANDS.RESUME_TRANSLATE_HOTKEY).catch(() => {});
   invoke(COMMANDS.RESUME_HOTKEY_LISTENER).catch(() => {});
   const btn = el("translate-record");
@@ -146,17 +141,13 @@ function handleKeyDown(e) {
   }
 
   if (isRecordingTranslate) {
-    if (recordingTranslatePhase === "modifier") {
-      if (KEY_MAP[e.code]) {
-        capturedTranslateModifier = e.code;
-        recordingTranslatePhase = "combo";
-        el("translate-record").textContent = t("ptt.nowPressKey");
-      }
-    } else if (recordingTranslatePhase === "combo") {
-      if (REGULAR_KEY_MAP[e.code]) {
-        currentTranslateKey = capturedTranslateModifier + "+" + e.code;
-        stopTranslateRecording();
-      }
+    if (KEY_MAP[e.code]) {
+      capturedTranslateModifiers.add(e.code);
+      const modNames = Array.from(capturedTranslateModifiers).map(m => KEY_MAP[m]).join(" + ");
+      el("translate-record").textContent = modNames + " + ...";
+    } else if (REGULAR_KEY_MAP[e.code] && capturedTranslateModifiers.size > 0) {
+      currentTranslateKey = Array.from(capturedTranslateModifiers).join("+") + "+" + e.code;
+      stopTranslateRecording();
     }
   }
 }
@@ -168,10 +159,13 @@ function handleKeyUp(e) {
       stopRecording();
     }
   }
-  if (isRecordingTranslate && recordingTranslatePhase === "combo") {
-    if (e.code === capturedTranslateModifier) {
-      // Translate hotkey must be a combo — don't allow modifier-only
-      stopTranslateRecording();
+  if (isRecordingTranslate) {
+    if (capturedTranslateModifiers.has(e.code)) {
+      capturedTranslateModifiers.delete(e.code);
+      if (capturedTranslateModifiers.size === 0) {
+        // All modifiers released without pressing a regular key — cancel
+        stopTranslateRecording();
+      }
     }
   }
 }
@@ -276,6 +270,21 @@ function doDictUndo() {
   undoTimer = null;
 }
 
+
+function getEnabledPacks() {
+  const packs = [];
+  el("dict-packs").querySelectorAll("input[type=checkbox]").forEach((cb) => {
+    if (cb.checked) packs.push(cb.value);
+  });
+  return packs;
+}
+
+function loadDictPacks(packs) {
+  el("dict-packs").querySelectorAll("input[type=checkbox]").forEach((cb) => {
+    cb.checked = packs.includes(cb.value);
+  });
+}
+
 function getDictString() {
   return dictTags.join(", ");
 }
@@ -304,6 +313,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     el("auto-start").checked = s.auto_start;
     setRecordingMode(s.recording_mode || "hold");
     loadDictFromString(s.dictionary || "");
+    loadDictPacks(s.dictionary_packs || []);
     dictTagsSnapshot = [...dictTags];
     el("llm-enabled").checked = s.llm_enabled || false;
     el("llm-model").value = s.llm_model || "llama-3.3-70b-versatile";
@@ -392,6 +402,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Undo button
   el("dict-undo-btn").addEventListener("click", doDictUndo);
 
+
   // Opacity slider
   el("opacity").addEventListener("input", () => {
     el("opacity-value").textContent = Math.round(el("opacity").value * 100) + "%";
@@ -421,6 +432,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       ui_locale: el("ui-locale").value,
       translate_hotkey: currentTranslateKey,
       translate_language: el("translate-language").value,
+      dictionary_packs: getEnabledPacks(),
     };
 
     try {

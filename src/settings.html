@@ -17,7 +17,7 @@
 
       <header class="header">
         <h1 data-i18n="header.title">Preferences</h1>
-        <span class="version">v0.4.2</span>
+        <span class="version">v0.4.3</span>
       </header>
 
       <section class="group">
@@ -75,7 +75,15 @@
           </div>
           <div class="dict-section">
             <div class="row">
-              <span class="row-label" data-i18n="row.dict">Dictionary</span>
+              <span class="row-label" data-i18n="row.dictPacks">Dictionary Packs</span>
+            </div>
+            <div class="dict-packs" id="dict-packs">
+              <label class="dict-pack-toggle"><input type="checkbox" value="crypto" /><span>Crypto / Web3</span></label>
+              <label class="dict-pack-toggle"><input type="checkbox" value="ai-ml" /><span>AI / ML</span></label>
+              <label class="dict-pack-toggle"><input type="checkbox" value="dev-tools" /><span>Dev Tools</span></label>
+            </div>
+            <div class="row">
+              <span class="row-label" data-i18n="row.dict">Custom Dictionary</span>
               <span class="dict-count" id="dict-count"></span>
             </div>
             <div class="dict-input-wrap">
