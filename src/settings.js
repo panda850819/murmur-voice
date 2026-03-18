@@ -216,7 +216,8 @@ function showStatus(message, isError) {
 
 function renderDictTags() {
   const container = el("dict-tags");
-  container.innerHTML = "";
+  // Security: Avoid innerHTML to prevent XSS sinks
+  container.textContent = "";
   dictTags.forEach((term, i) => {
     const tag = document.createElement("span");
     tag.className = "dict-tag";
