@@ -241,7 +241,8 @@ h1 {
   width: 100%;
 }
 
-.groq-key-wrap input {
+.groq-key-wrap input[type="text"],
+.groq-key-wrap input[type="password"] {
   width: 100%;
   padding: 8px 12px;
   font-family: inherit;
@@ -254,12 +255,14 @@ h1 {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.groq-key-wrap input:focus {
+.groq-key-wrap input[type="text"]:focus,
+.groq-key-wrap input[type="password"]:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
-.groq-key-wrap input::placeholder {
+.groq-key-wrap input[type="text"]::placeholder,
+.groq-key-wrap input[type="password"]::placeholder {
   color: var(--text-muted);
 }
 
