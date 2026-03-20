@@ -19,6 +19,7 @@ let originalText = "";
 let addedWords = new Set();
 let dismissedWords = new Set();
 let debounceTimer = null;
+let wordSegmenter = null;
 
 function setHeader(text, processing) {
   const el = headerText();
@@ -83,8 +84,11 @@ function disableEditing() {
 
 function tokenize(text) {
   if (typeof Intl !== "undefined" && Intl.Segmenter) {
-    const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
-    return [...segmenter.segment(text)]
+    if (!wordSegmenter) {
+      // Cache segmenter since instantiation is computationally expensive
+      wordSegmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+    }
+    return [...wordSegmenter.segment(text)]
       .filter((s) => s.isWordLike)
       .map((s) => s.segment);
   }
@@ -92,7 +96,8 @@ function tokenize(text) {
 }
 
 function wordDiff(original, edited) {
-  const origSet = new Set(tokenize(original).map((w) => w.toLowerCase()));
+  // Apply toLowerCase() to original before tokenizing to avoid intermediate array mapping
+  const origSet = new Set(tokenize(original.toLowerCase()));
   const editWords = tokenize(edited);
   return editWords.filter((w) => !origSet.has(w.toLowerCase()) && w.length >= 2);
 }
