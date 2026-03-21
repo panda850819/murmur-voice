@@ -89,6 +89,11 @@ CRITICAL: Output ONLY the cleaned transcription. Nothing else. No explanations, 
 
 /// Returns true if the text contains CJK characters.
 pub(crate) fn has_cjk(text: &str) -> bool {
+    // Fast path: pure ASCII or non-CJK text can skip UTF-8 decoding.
+    // CJK characters in our ranges (U+3400 to U+FAFF) are 3-byte sequences starting with 0xE3..0xEF.
+    if !text.as_bytes().iter().any(|&b| matches!(b, 0xE3..=0xEF)) {
+        return false;
+    }
     text.chars()
         .any(|c| matches!(c as u32, 0x4E00..=0x9FFF | 0x3400..=0x4DBF | 0xF900..=0xFAFF))
 }
@@ -106,33 +111,46 @@ pub(crate) fn detect_target_language(text: &str) -> &'static str {
 /// In mixed CJK+English text, replaces English words with numbered placeholders
 /// so the LLM cannot translate them. Pure English or pure CJK text is unchanged.
 fn protect_english(text: &str) -> (String, Vec<(String, String)>) {
-    if !has_cjk(text) || !text.chars().any(|c| c.is_ascii_alphabetic()) {
+    // Fast path: if no CJK or no ascii alphabetic byte, skip processing
+    if !has_cjk(text) || !text.as_bytes().iter().any(|b| b.is_ascii_alphabetic()) {
         return (text.to_string(), Vec::new());
     }
 
-    let mut result = String::new();
+    let mut result = String::with_capacity(text.len() + 16);
     let mut placeholders = Vec::new();
-    let mut chars = text.chars().peekable();
 
-    while let Some(&c) = chars.peek() {
-        if c.is_ascii_alphabetic() {
-            let mut word = String::new();
-            while let Some(&c) = chars.peek() {
-                if c.is_ascii_alphanumeric() {
-                    word.push(c);
-                    chars.next();
-                } else {
-                    break;
-                }
+    let mut word_start = None;
+    let mut last_idx = 0;
+
+    for (i, c) in text.char_indices() {
+        if word_start.is_some() {
+            if !c.is_ascii_alphanumeric() {
+                let start = word_start.take().unwrap();
+                let word = &text[start..i];
+                let idx = placeholders.len();
+
+                let placeholder = format!("__E{idx}__");
+                result.push_str(&placeholder);
+                placeholders.push((placeholder, word.to_string()));
+                last_idx = i;
             }
-            let idx = placeholders.len();
-            let placeholder = format!("__E{idx}__");
-            placeholders.push((placeholder.clone(), word));
-            result.push_str(&placeholder);
-        } else {
-            result.push(c);
-            chars.next();
         }
+
+        if word_start.is_none() && c.is_ascii_alphabetic() {
+            result.push_str(&text[last_idx..i]);
+            word_start = Some(i);
+        }
+    }
+
+    if let Some(start) = word_start {
+        let word = &text[start..];
+        let idx = placeholders.len();
+
+        let placeholder = format!("__E{idx}__");
+        result.push_str(&placeholder);
+        placeholders.push((placeholder, word.to_string()));
+    } else {
+        result.push_str(&text[last_idx..]);
     }
 
     (result, placeholders)
