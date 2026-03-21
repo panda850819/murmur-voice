@@ -123,17 +123,15 @@ fn protect_english(text: &str) -> (String, Vec<(String, String)>) {
     let mut last_idx = 0;
 
     for (i, c) in text.char_indices() {
-        if word_start.is_some() {
-            if !c.is_ascii_alphanumeric() {
-                let start = word_start.take().unwrap();
-                let word = &text[start..i];
-                let idx = placeholders.len();
+        if word_start.is_some() && !c.is_ascii_alphanumeric() {
+            let start = word_start.take().unwrap();
+            let word = &text[start..i];
+            let idx = placeholders.len();
 
-                let placeholder = format!("__E{idx}__");
-                result.push_str(&placeholder);
-                placeholders.push((placeholder, word.to_string()));
-                last_idx = i;
-            }
+            let placeholder = format!("__E{idx}__");
+            result.push_str(&placeholder);
+            placeholders.push((placeholder, word.to_string()));
+            last_idx = i;
         }
 
         if word_start.is_none() && c.is_ascii_alphabetic() {
