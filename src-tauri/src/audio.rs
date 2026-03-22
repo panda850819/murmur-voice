@@ -291,7 +291,30 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
     // Optimization: Pre-calculate inverse ratio to use multiplication instead of division
     let inv_ratio = 1.0 / ratio;
 
-    for i in 0..output_len {
+    // Split loop optimization:
+    // Calculate the safe output length where `src_idx + 1 < input.len()` is guaranteed to be true.
+    let safe_output_len = if input.len() > 1 {
+        std::cmp::min(output_len, ((input.len() - 1) as f64 * ratio).floor() as usize)
+    } else {
+        0
+    };
+
+    // Hot loop: bounds checking eliminated
+    for i in 0..safe_output_len {
+        let src_pos = i as f64 * inv_ratio;
+        let src_idx = src_pos as usize;
+        let frac = (src_pos - src_idx as f64) as f32;
+
+        let sample = unsafe {
+            // SAFETY: src_idx is guaranteed to be < input.len() - 1 because i < safe_output_len
+            *input.get_unchecked(src_idx) * (1.0 - frac) + *input.get_unchecked(src_idx + 1) * frac
+        };
+
+        output.push(sample);
+    }
+
+    // Tail loop for boundary elements
+    for i in safe_output_len..output_len {
         let src_pos = i as f64 * inv_ratio;
         let src_idx = src_pos as usize;
         let frac = (src_pos - src_idx as f64) as f32;
