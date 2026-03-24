@@ -291,7 +291,25 @@ fn resample_linear_into(input: &[f32], ratio: f64, output: &mut Vec<f32>) {
     // Optimization: Pre-calculate inverse ratio to use multiplication instead of division
     let inv_ratio = 1.0 / ratio;
 
-    for i in 0..output_len {
+    // Optimization: Split loop into hot path (safe from bounds) and tail path
+    let safe_output_len = if input.len() > 1 {
+        let len = ((input.len() - 1) as f64 * ratio).floor() as usize;
+        len.min(output_len)
+    } else {
+        0
+    };
+
+    // Hot path: guaranteed src_idx + 1 < input.len()
+    for i in 0..safe_output_len {
+        let src_pos = i as f64 * inv_ratio;
+        let src_idx = src_pos as usize;
+        let frac = (src_pos - src_idx as f64) as f32;
+
+        output.push(input[src_idx] * (1.0 - frac) + input[src_idx + 1] * frac);
+    }
+
+    // Tail path: handles boundary cases
+    for i in safe_output_len..output_len {
         let src_pos = i as f64 * inv_ratio;
         let src_idx = src_pos as usize;
         let frac = (src_pos - src_idx as f64) as f32;
