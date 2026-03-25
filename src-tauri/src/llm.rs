@@ -89,6 +89,12 @@ CRITICAL: Output ONLY the cleaned transcription. Nothing else. No explanations, 
 
 /// Returns true if the text contains CJK characters.
 pub(crate) fn has_cjk(text: &str) -> bool {
+    // Fast path: if the text is entirely ASCII, it cannot contain CJK characters.
+    // Typical mostly-English strings or short placeholders can skip the full UTF-8 scan.
+    if text.is_ascii() {
+        return false;
+    }
+
     text.chars()
         .any(|c| matches!(c as u32, 0x4E00..=0x9FFF | 0x3400..=0x4DBF | 0xF900..=0xFAFF))
 }
@@ -106,28 +112,39 @@ pub(crate) fn detect_target_language(text: &str) -> &'static str {
 /// In mixed CJK+English text, replaces English words with numbered placeholders
 /// so the LLM cannot translate them. Pure English or pure CJK text is unchanged.
 fn protect_english(text: &str) -> (String, Vec<(String, String)>) {
-    if !has_cjk(text) || !text.chars().any(|c| c.is_ascii_alphabetic()) {
+    if !has_cjk(text) || !text.as_bytes().iter().any(|&b| b.is_ascii_alphabetic()) {
         return (text.to_string(), Vec::new());
     }
 
-    let mut result = String::new();
+    // Preallocate to avoid frequent reallocations.
+    // Assuming worst case: every word is replaced by __E(idx)__ which might slightly increase size,
+    // but often reduces it (e.g., long words replaced by __E0__).
+    let mut result = String::with_capacity(text.len());
     let mut placeholders = Vec::new();
-    let mut chars = text.chars().peekable();
 
-    while let Some(&c) = chars.peek() {
+    let mut chars = text.char_indices().peekable();
+
+    while let Some(&(start_idx, c)) = chars.peek() {
         if c.is_ascii_alphabetic() {
-            let mut word = String::new();
-            while let Some(&c) = chars.peek() {
-                if c.is_ascii_alphanumeric() {
-                    word.push(c);
+            // Found the start of an English word.
+            chars.next(); // consume the first character
+
+            // Advance until we hit a non-alphanumeric character.
+            let mut end_idx = start_idx + c.len_utf8();
+            while let Some(&(next_idx, next_c)) = chars.peek() {
+                if next_c.is_ascii_alphanumeric() {
+                    end_idx = next_idx + next_c.len_utf8();
                     chars.next();
                 } else {
                     break;
                 }
             }
+
+            // Extract the word as a slice instead of pushing character by character.
+            let word = &text[start_idx..end_idx];
             let idx = placeholders.len();
             let placeholder = format!("__E{idx}__");
-            placeholders.push((placeholder.clone(), word));
+            placeholders.push((placeholder.clone(), word.to_string()));
             result.push_str(&placeholder);
         } else {
             result.push(c);
