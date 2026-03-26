@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 
@@ -340,11 +341,16 @@ pub(crate) fn save_settings(settings: &Settings, base: &Path) -> Result<(), Stri
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| e.to_string())?;
+
+    // Secure configuration data and prevent TOCTOU vulnerabilities
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
 
     #[cfg(unix)]
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
-        .map_err(|e| e.to_string())?;
+    options.mode(0o600);
+
+    let mut file = options.open(&path).map_err(|e| e.to_string())?;
+    file.write_all(json.as_bytes()).map_err(|e| e.to_string())?;
 
     Ok(())
 }
