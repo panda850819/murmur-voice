@@ -106,17 +106,22 @@ pub(crate) fn detect_target_language(text: &str) -> &'static str {
 /// In mixed CJK+English text, replaces English words with numbered placeholders
 /// so the LLM cannot translate them. Pure English or pure CJK text is unchanged.
 fn protect_english(text: &str) -> (String, Vec<(String, String)>) {
+    // Fast path: if text is purely ASCII, it cannot contain CJK characters.
+    if text.is_ascii() {
+        return (text.to_string(), Vec::new());
+    }
+
     if !has_cjk(text) || !text.chars().any(|c| c.is_ascii_alphabetic()) {
         return (text.to_string(), Vec::new());
     }
 
-    let mut result = String::new();
+    let mut result = String::with_capacity(text.len() + 32);
     let mut placeholders = Vec::new();
     let mut chars = text.chars().peekable();
 
     while let Some(&c) = chars.peek() {
         if c.is_ascii_alphabetic() {
-            let mut word = String::new();
+            let mut word = String::with_capacity(16);
             while let Some(&c) = chars.peek() {
                 if c.is_ascii_alphanumeric() {
                     word.push(c);
@@ -127,8 +132,8 @@ fn protect_english(text: &str) -> (String, Vec<(String, String)>) {
             }
             let idx = placeholders.len();
             let placeholder = format!("__E{idx}__");
-            placeholders.push((placeholder.clone(), word));
             result.push_str(&placeholder);
+            placeholders.push((placeholder, word));
         } else {
             result.push(c);
             chars.next();
