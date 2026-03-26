@@ -1,0 +1,82 @@
+name: Bot PR Guard
+
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  dedup-check:
+    if: >-
+      startsWith(github.head_ref, 'bolt-') ||
+      startsWith(github.head_ref, 'bolt/') ||
+      startsWith(github.head_ref, 'sentinel-') ||
+      startsWith(github.head_ref, 'sentinel/')
+    runs-on: ubuntu-latest
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_REF: ${{ github.head_ref }}
+    steps:
+      - name: Detect bot type
+        id: bot
+        run: |
+          if [[ "$HEAD_REF" == bolt-* || "$HEAD_REF" == bolt/* ]]; then
+            echo "type=bolt" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=sentinel" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Get changed files in this PR
+        run: |
+          gh pr diff "$PR_NUMBER" --name-only --repo "$GITHUB_REPOSITORY" | sort -u > "/tmp/this_pr_${PR_NUMBER}.txt"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for duplicate open PRs
+        id: dupes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BOT_TYPE: ${{ steps.bot.outputs.type }}
+        run: |
+          this_file="/tmp/this_pr_${PR_NUMBER}.txt"
+          this_count=$(wc -l < "$this_file" | tr -d ' ')
+
+          gh pr list --state open --sort updated --json number,headRefName --limit 100 --repo "$GITHUB_REPOSITORY" | \
+            jq -r ".[] | select(.number != ($PR_NUMBER | tonumber)) | select(.headRefName | startswith(\"${BOT_TYPE}-\") or startswith(\"${BOT_TYPE}/\")) | .number" > "/tmp/candidates_${PR_NUMBER}.txt"
+
+          duplicate_of=""
+          overlap_pct=""
+
+          while read -r other_pr; do
+            [[ -z "$other_pr" ]] && continue
+
+            other_files=$(gh pr diff "$other_pr" --name-only --repo "$GITHUB_REPOSITORY" 2>/dev/null | sort -u || true)
+            [[ -z "$other_files" ]] && continue
+
+            common=$(comm -12 "$this_file" <(echo "$other_files") | wc -l | tr -d ' ')
+
+            if [[ "$this_count" -gt 0 && "$common" -gt 0 ]]; then
+              overlap=$((common * 100 / this_count))
+              if [[ "$overlap" -ge 50 ]]; then
+                duplicate_of="$other_pr"
+                overlap_pct="$overlap"
+                break
+              fi
+            fi
+          done < "/tmp/candidates_${PR_NUMBER}.txt"
+
+          echo "duplicate_of=$duplicate_of" >> "$GITHUB_OUTPUT"
+          echo "overlap=$overlap_pct" >> "$GITHUB_OUTPUT"
+
+      - name: Close duplicate PR
+        if: steps.dupes.outputs.duplicate_of != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DUPE_OF: ${{ steps.dupes.outputs.duplicate_of }}
+          OVERLAP: ${{ steps.dupes.outputs.overlap }}
+        run: |
+          gh pr close "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --comment "Closing as duplicate of #${DUPE_OF} (${OVERLAP}% file overlap). Bot PR dedup policy: at most 1 open PR per bot type per file set. See #94."
