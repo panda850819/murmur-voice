@@ -96,8 +96,7 @@ function tokenize(text) {
 }
 
 function wordDiff(original, edited) {
-  // Optimization: Lowercase entire string before tokenization to avoid creating and mapping an intermediate array
-  const origSet = new Set(tokenize(original.toLowerCase()));
+  const origSet = new Set(tokenize(original).map((w) => w.toLowerCase()));
   const editWords = tokenize(edited);
   return editWords.filter((w) => !origSet.has(w.toLowerCase()) && w.length >= 2);
 }

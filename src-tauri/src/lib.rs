@@ -711,11 +711,8 @@ async fn check_for_updates() -> Result<UpdateCheckResult, String> {
 
 #[tauri::command]
 async fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
-    // SECURITY: Restrict allowed URL schemes to prevent arbitrary URI execution (e.g. file://, javascript:)
-    if !url.starts_with("http://")
-        && !url.starts_with("https://")
-        && !url.starts_with("x-apple.systempreferences:")
-    {
+    const ALLOWED_SCHEMES: &[&str] = &["http://", "https://", "x-apple.systempreferences:"];
+    if !ALLOWED_SCHEMES.iter().any(|s| url.starts_with(s)) {
         log::error!("Blocked attempt to open unauthorized URL scheme: {}", url);
         return Err("Unauthorized URL scheme".to_string());
     }
