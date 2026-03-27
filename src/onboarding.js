@@ -144,10 +144,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (badge) {
       badge.textContent = micGranted ? "\u2705" : "\u274C";
     }
-    const deniedMsg = el("mic-denied-msg");
-    if (deniedMsg) {
-      deniedMsg.classList.toggle("hidden", !micFinal);
-    }
   }
 
   async function checkAccStatus() {
@@ -162,13 +158,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  // Open System Settings for Microphone privacy pane
-  const btnOpenMicSettings = el("btn-open-mic-settings");
-  if (btnOpenMicSettings) {
-    btnOpenMicSettings.addEventListener("click", () => {
-      invoke(COMMANDS.OPEN_URL, { url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone" }).catch(() => {});
-    });
-  }
+  // Click permission items to open System Settings
+  el("perm-mic").addEventListener("click", () => {
+    invoke(COMMANDS.OPEN_URL, { url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone" }).catch(() => {});
+  });
+  el("perm-acc").addEventListener("click", () => {
+    invoke(COMMANDS.OPEN_URL, { url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" }).catch(() => {});
+  });
 
   // Trigger macOS mic permission dialog (no-op if already granted/denied)
   invoke(COMMANDS.REQUEST_MICROPHONE).catch(() => {});
@@ -179,7 +175,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (!micGranted && !micFinal) await checkMicStatus();
     if (!accGranted) await checkAccStatus();
     if ((micGranted || micFinal) && accGranted) clearInterval(permPoll);
-  }, 3000);
+  }, 1000);
 
   // Step 3: Engine choice
   document.querySelectorAll(".engine-card").forEach((card) => {

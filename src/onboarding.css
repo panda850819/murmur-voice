@@ -148,6 +148,15 @@ h1 {
   padding: 10px 14px;
 }
 
+.permission-item.clickable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.permission-item.clickable:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
 .permission-item + .permission-item {
   border-top: 1px solid var(--border);
 }
