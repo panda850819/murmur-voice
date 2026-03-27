@@ -232,18 +232,17 @@ impl Settings {
 
     /// Builds the full initial_prompt for Whisper, combining language bias,
     /// enabled dictionary packs, and user custom dictionary.
+    ///
+    /// Whisper limits initial_prompt to ~224 tokens (max_initial_prompt_tokens).
+    /// Order matters: Whisper weighs tokens closest to the audio (end of prompt)
+    /// more heavily. We put dictionary terms first (can be truncated) and
+    /// language bias + custom dictionary last (most important).
     pub fn whisper_initial_prompt(&self) -> String {
         let mut parts = Vec::new();
 
-        // Bias Whisper toward Traditional Chinese output when language is zh
-        if self.language == "zh" || self.language == "auto" {
-            parts.push("繁體中文語音轉錄，使用台灣正體中文。".to_string());
-        }
-
-        // Append enabled dictionary pack terms
+        // Dictionary pack terms first (lowest priority, truncated first by Whisper)
         for pack in &self.dictionary_packs {
             if let Some(content) = dict_pack_content(pack) {
-                // Flatten file content into comma-separated terms on one line
                 let terms: String = content
                     .lines()
                     .flat_map(|line| line.split(','))
@@ -257,8 +256,14 @@ impl Settings {
             }
         }
 
+        // Custom dictionary (higher priority than packs)
         if !self.dictionary.is_empty() {
             parts.push(self.dictionary.clone());
+        }
+
+        // Language bias last (highest priority — closest to audio)
+        if self.language == "zh" || self.language == "auto" {
+            parts.push("繁體中文語音轉錄，使用台灣正體中文。".to_string());
         }
 
         parts.join(" ")
@@ -618,7 +623,7 @@ mod tests {
             dictionary: "Hello World".to_string(),
             ..Settings::default()
         };
-        assert_eq!(s.whisper_initial_prompt(), "繁體中文語音轉錄，使用台灣正體中文。 Hello World");
+        assert_eq!(s.whisper_initial_prompt(), "Hello World 繁體中文語音轉錄，使用台灣正體中文。");
     }
 
     #[test]
