@@ -359,7 +359,8 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
 
     show_main_window(app);
     state.main_visible.store(true, Ordering::SeqCst);
-    show_preview_window(app);
+    // Preview window is NOT shown during recording — the main bar's expanded
+    // mode handles live transcription display. Preview appears on result.
 
     // Emit mode info for main bar display
     let llm_enabled = state.settings.lock().map(|s| s.llm_enabled).unwrap_or(false);
@@ -804,6 +805,11 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         events::TRANSCRIPTION_COMPLETE,
         serde_json::json!({ "text": text, "mode": mode_str }),
     );
+
+    // Show preview window now that result is ready
+    if !text.is_empty() {
+        show_preview_window(app);
+    }
 
     // Auto-hide main window 8s after transcription complete
     {
