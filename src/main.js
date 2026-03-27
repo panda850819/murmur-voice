@@ -32,9 +32,11 @@ function expandMainBar() {
 }
 
 const MIN_EXPANDED_HEIGHT = 80;
+const MAX_EXPANDED_HEIGHT = 160;
 
 function maybeExpandToFitContent() {
   if (!expandPending && !appEl.classList.contains("expanded")) return;
+  if (recordingMaxHeight >= MAX_EXPANDED_HEIGHT) return;
   if (expandPending) {
     expandPending = false;
     // Resize window first so there's room before layout changes

@@ -106,7 +106,7 @@ html, body {
   word-break: break-word;
   line-height: 1.5;
   text-overflow: clip;
-  overflow-y: auto;
+  overflow-y: hidden;
   flex-basis: 100%;
   order: -1;
   margin-bottom: 4px;
