@@ -48,6 +48,9 @@ let dictTags = [];
 let dictTagsSnapshot = [];
 let undoTimer = null;
 let undoEntry = null; // { term, index }
+let textReplacements = []; // { find, replace, enabled }
+let replaceUndoTimer = null;
+let replaceUndoEntry = null; // { rule, index }
 let currentTranslateKey = "AltLeft+KeyT";
 let isRecordingTranslate = false;
 let capturedTranslateModifiers = new Set();
@@ -297,6 +300,104 @@ function loadDictFromString(str) {
   renderDictTags();
 }
 
+// --- Text Replacement Management ---
+
+function renderReplaceList() {
+  const list = el("replace-list");
+  while (list.firstChild) list.removeChild(list.firstChild);
+  textReplacements.forEach((rule, i) => {
+    const row = document.createElement("div");
+    row.className = "replace-row";
+
+    const findInput = document.createElement("input");
+    findInput.type = "text";
+    findInput.className = "replace-input";
+    findInput.value = rule.find;
+    findInput.spellcheck = false;
+    findInput.addEventListener("input", () => { textReplacements[i].find = findInput.value; });
+
+    const arrow = document.createElement("span");
+    arrow.className = "replace-arrow";
+    arrow.textContent = "\u2192";
+
+    const replaceInput = document.createElement("input");
+    replaceInput.type = "text";
+    replaceInput.className = "replace-input";
+    replaceInput.value = rule.replace;
+    replaceInput.spellcheck = false;
+    replaceInput.addEventListener("input", () => { textReplacements[i].replace = replaceInput.value; });
+
+    const del = document.createElement("button");
+    del.className = "replace-delete";
+    del.textContent = "\u00d7";
+    del.addEventListener("click", () => removeReplaceRule(i));
+
+    row.appendChild(findInput);
+    row.appendChild(arrow);
+    row.appendChild(replaceInput);
+    row.appendChild(del);
+    list.appendChild(row);
+  });
+
+  updateReplaceCount();
+  updateReplaceEmpty();
+}
+
+function updateReplaceCount() {
+  const count = el("replace-count");
+  count.textContent = textReplacements.length > 0 ? textReplacements.length : "";
+}
+
+function updateReplaceEmpty() {
+  el("replace-empty").classList.toggle("hidden", textReplacements.length > 0);
+}
+
+function addReplaceRule(find, replace) {
+  const cleanFind = find.trim();
+  if (!cleanFind) return;
+  textReplacements.push({ find: cleanFind, replace: (replace || "").trim(), enabled: true });
+  renderReplaceList();
+}
+
+function removeReplaceRule(index) {
+  const removed = textReplacements.splice(index, 1)[0];
+  renderReplaceList();
+  showReplaceUndo(removed, index);
+}
+
+function showReplaceUndo(rule, index) {
+  if (replaceUndoTimer) clearTimeout(replaceUndoTimer);
+  replaceUndoEntry = { rule, index };
+  const container = el("replace-undo");
+  el("replace-undo-text").textContent = t("replace.removed").replace("{term}", rule.find);
+  container.classList.remove("hidden");
+  replaceUndoTimer = setTimeout(() => {
+    container.classList.add("hidden");
+    replaceUndoEntry = null;
+    replaceUndoTimer = null;
+  }, 4000);
+}
+
+function doReplaceUndo() {
+  if (!replaceUndoEntry) return;
+  const { rule, index } = replaceUndoEntry;
+  const pos = Math.min(index, textReplacements.length);
+  textReplacements.splice(pos, 0, rule);
+  renderReplaceList();
+  if (replaceUndoTimer) clearTimeout(replaceUndoTimer);
+  el("replace-undo").classList.add("hidden");
+  replaceUndoEntry = null;
+  replaceUndoTimer = null;
+}
+
+function collectReplacements() {
+  return textReplacements.filter(r => r.find.trim()).map(r => ({
+    find: r.find.trim(),
+    replace: r.replace.trim(),
+    enabled: r.enabled,
+  }));
+}
+
 // --- Init ---
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -324,6 +425,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     el("custom-llm-url").value = s.custom_llm_url || "";
     el("custom-llm-key").value = s.custom_llm_key || "";
     el("custom-llm-model").value = s.custom_llm_model || "";
+    textReplacements = (s.text_replacements || []).map(r => ({
+      find: r.find || "",
+      replace: r.replace || "",
+      enabled: r.enabled !== false,
+    }));
+    renderReplaceList();
     updateEngineVisibility();
     updateLlmVisibility();
     setTranslateKey(s.translate_hotkey || "AltLeft+KeyT");
@@ -402,6 +509,39 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Undo button
   el("dict-undo-btn").addEventListener("click", doDictUndo);
 
+  // Text replacement — add rule on Enter in replace field
+  el("replace-value-new").addEventListener("keydown", (e) => {
+    if (e.code === "Enter") {
+      e.preventDefault();
+      const findVal = el("replace-find-new").value;
+      const replaceVal = el("replace-value-new").value;
+      if (findVal.trim()) {
+        addReplaceRule(findVal, replaceVal);
+        el("replace-find-new").value = "";
+        el("replace-value-new").value = "";
+        el("replace-find-new").focus();
+      }
+    }
+  });
+
+  // Also allow Enter on find field to jump to replace field
+  el("replace-find-new").addEventListener("keydown", (e) => {
+    if (e.code === "Enter") {
+      e.preventDefault();
+      el("replace-value-new").focus();
+    }
+  });
+
+  // Replace undo button
+  el("replace-undo-btn").addEventListener("click", doReplaceUndo);
+
+  // Cmd+S / Ctrl+S keyboard shortcut
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+      e.preventDefault();
+      el("btn-save").click();
+    }
+  });
 
   // Opacity slider
   el("opacity").addEventListener("input", () => {
@@ -433,12 +573,12 @@ window.addEventListener("DOMContentLoaded", async () => {
       translate_hotkey: currentTranslateKey,
       translate_language: el("translate-language").value,
       dictionary_packs: getEnabledPacks(),
+      text_replacements: collectReplacements(),
     };
 
     try {
       await invoke(COMMANDS.SAVE_SETTINGS, { newSettings });
       showStatus(t("status.saved"));
-      setTimeout(() => getCurrentWindow().close(), 500);
     } catch (e) {
       showStatus(t("status.saveFailed").replace("{err}", e), true);
     }

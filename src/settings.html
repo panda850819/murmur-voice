@@ -99,6 +99,29 @@
       </section>
 
       <section class="group">
+        <div class="group-label">
+          <span data-i18n="settings.textReplacement">Text Replacement</span>
+          <span class="replace-count" id="replace-count"></span>
+        </div>
+        <div class="group-card">
+          <div class="replace-empty" id="replace-empty">
+            <div class="replace-empty-title" data-i18n="replace.emptyTitle">No replacement rules yet</div>
+            <div class="replace-empty-desc" data-i18n="replace.emptyDesc">Fix commonly misrecognized words after transcription</div>
+          </div>
+          <div class="replace-list" id="replace-list"></div>
+          <div class="replace-add-row">
+            <input type="text" class="replace-input" id="replace-find-new" data-i18n-placeholder="replace.findPlaceholder" placeholder="Find..." spellcheck="false" />
+            <span class="replace-arrow">&rarr;</span>
+            <input type="text" class="replace-input" id="replace-value-new" data-i18n-placeholder="replace.replacePlaceholder" placeholder="Replace with..." spellcheck="false" />
+          </div>
+          <div id="replace-undo" class="replace-undo hidden">
+            <span id="replace-undo-text" class="replace-undo-text"></span>
+            <button id="replace-undo-btn" class="replace-undo-btn">Undo</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="group">
         <div class="group-label" data-i18n="group.ai">AI Processing</div>
         <div class="group-card">
           <div class="row">

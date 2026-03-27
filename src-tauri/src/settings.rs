@@ -3,6 +3,17 @@ use serde::{Deserialize, Serialize};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TextReplacement {
+    pub find: String,
+    pub replace: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -30,6 +41,8 @@ pub(crate) struct Settings {
     pub translate_hotkey: String,
     pub translate_language: String,
     pub dictionary_packs: Vec<String>,
+    #[serde(default)]
+    pub text_replacements: Vec<TextReplacement>,
 }
 
 /// Target for PTT key matching — supports single modifier or modifier+key combos.
@@ -65,6 +78,7 @@ impl Default for Settings {
             translate_hotkey: "AltLeft+KeyT".to_string(),
             translate_language: "en".to_string(),
             dictionary_packs: Vec::new(),
+            text_replacements: Vec::new(),
         }
     }
 }
@@ -124,6 +138,17 @@ impl Settings {
 
     pub fn translate_key_target(&self) -> PttKeyTarget {
         parse_hotkey(&self.translate_hotkey)
+    }
+
+    /// Apply text replacement rules to the given text.
+    pub fn apply_replacements(&self, text: &str) -> String {
+        let mut result = text.to_string();
+        for rule in &self.text_replacements {
+            if rule.enabled && !rule.find.is_empty() {
+                result = result.replace(&rule.find, &rule.replace);
+            }
+        }
+        result
     }
 
     /// Returns the whisper language code.
@@ -582,5 +607,110 @@ mod tests {
         let single = parse_hotkey("MetaLeft+KeyT");
         assert_ne!(t.modifier_mask, single.modifier_mask);
         assert_eq!(t.regular_key, single.regular_key); // same regular key
+    }
+
+    #[test]
+    fn test_apply_replacements_no_rules() {
+        let s = Settings::default();
+        assert_eq!(s.apply_replacements("hello world"), "hello world");
+    }
+
+    #[test]
+    fn test_apply_replacements_single_rule() {
+        let s = Settings {
+            text_replacements: vec![TextReplacement {
+                find: "foo".to_string(),
+                replace: "bar".to_string(),
+                enabled: true,
+            }],
+            ..Settings::default()
+        };
+        assert_eq!(s.apply_replacements("foo baz foo"), "bar baz bar");
+    }
+
+    #[test]
+    fn test_apply_replacements_multiple_rules() {
+        let s = Settings {
+            text_replacements: vec![
+                TextReplacement {
+                    find: "a".to_string(),
+                    replace: "b".to_string(),
+                    enabled: true,
+                },
+                TextReplacement {
+                    find: "c".to_string(),
+                    replace: "d".to_string(),
+                    enabled: true,
+                },
+            ],
+            ..Settings::default()
+        };
+        assert_eq!(s.apply_replacements("a c"), "b d");
+    }
+
+    #[test]
+    fn test_apply_replacements_disabled_rule_skipped() {
+        let s = Settings {
+            text_replacements: vec![TextReplacement {
+                find: "foo".to_string(),
+                replace: "bar".to_string(),
+                enabled: false,
+            }],
+            ..Settings::default()
+        };
+        assert_eq!(s.apply_replacements("foo"), "foo");
+    }
+
+    #[test]
+    fn test_apply_replacements_empty_find_skipped() {
+        let s = Settings {
+            text_replacements: vec![TextReplacement {
+                find: String::new(),
+                replace: "bar".to_string(),
+                enabled: true,
+            }],
+            ..Settings::default()
+        };
+        assert_eq!(s.apply_replacements("hello"), "hello");
+    }
+
+    #[test]
+    fn test_apply_replacements_empty_replace_deletes() {
+        let s = Settings {
+            text_replacements: vec![TextReplacement {
+                find: "remove".to_string(),
+                replace: String::new(),
+                enabled: true,
+            }],
+            ..Settings::default()
+        };
+        assert_eq!(s.apply_replacements("please remove this"), "please  this");
+    }
+
+    #[test]
+    fn test_text_replacements_serialization_roundtrip() {
+        let s = Settings {
+            text_replacements: vec![
+                TextReplacement {
+                    find: "GPT".to_string(),
+                    replace: "LLM".to_string(),
+                    enabled: true,
+                },
+                TextReplacement {
+                    find: "typo".to_string(),
+                    replace: "type".to_string(),
+                    enabled: false,
+                },
+            ],
+            ..Settings::default()
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        let deserialized: Settings = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.text_replacements.len(), 2);
+        assert_eq!(deserialized.text_replacements[0].find, "GPT");
+        assert_eq!(deserialized.text_replacements[0].replace, "LLM");
+        assert!(deserialized.text_replacements[0].enabled);
+        assert_eq!(deserialized.text_replacements[1].find, "typo");
+        assert!(!deserialized.text_replacements[1].enabled);
     }
 }

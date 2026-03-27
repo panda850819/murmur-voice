@@ -563,16 +563,16 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         }),
     );
 
-    // LLM post-processing via TextEnhancer trait
-    let (enhancer, app_aware_style) = {
+    log::debug!("[whisper raw] {}", raw_text);
+
+    // Read settings once: build enhancer + apply text replacements
+    let (enhancer, app_aware_style, raw_text) = {
         let s = state
             .settings
             .lock()
             .map_err(|e| format!("settings mutex poisoned: {e}"))?;
-        (llm::create_enhancer(&s), s.app_aware_style)
+        (llm::create_enhancer(&s), s.app_aware_style, s.apply_replacements(&raw_text))
     };
-
-    log::debug!("[whisper raw] {}", raw_text);
 
     let text = if let Some(enhancer) = enhancer {
         if raw_text.is_empty() {
