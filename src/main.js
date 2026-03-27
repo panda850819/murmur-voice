@@ -10,6 +10,7 @@ let appBadge;
 let appEl;
 let isRecording = false;
 let isCollapsing = false;
+let recordingMaxHeight = 0;
 
 function setStatus(state, text) {
   const dot = statusDot;
@@ -23,11 +24,21 @@ function setStatus(state, text) {
 function expandMainBar() {
   isRecording = true;
   isCollapsing = false;
+  recordingMaxHeight = 0;
   appEl.classList.remove("collapsing");
   appEl.classList.add("expanded");
   transcription.classList.add("multiline");
-  // Expand to max height immediately (no gradual resize)
-  invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: 120 });
+  // Don't resize yet — grows gradually as text arrives via PARTIAL_TRANSCRIPTION
+}
+
+function maybeExpandToFitContent() {
+  if (!isRecording) return;
+  // scrollHeight gives full content height even when overflow is constrained
+  const neededHeight = appEl.scrollHeight + 8; // +8 for margin
+  if (neededHeight > recordingMaxHeight) {
+    recordingMaxHeight = neededHeight;
+    invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: neededHeight });
+  }
 }
 
 function collapseMainBar() {
@@ -55,6 +66,7 @@ function resetMainBar() {
   // Immediate reset without animation (error/cancel)
   isRecording = false;
   isCollapsing = false;
+  recordingMaxHeight = 0;
   appEl.classList.remove("expanded", "collapsing");
   transcription.classList.remove("multiline");
   invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: 48 });
@@ -133,6 +145,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Live transcription updates while recording
   await listen(EVENTS.PARTIAL_TRANSCRIPTION, (event) => {
     transcription.textContent = event.payload;
+    maybeExpandToFitContent();
   });
 
   await listen(EVENTS.TRANSCRIPTION_COMPLETE, (event) => {
