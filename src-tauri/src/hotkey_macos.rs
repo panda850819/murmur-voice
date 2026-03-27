@@ -50,15 +50,6 @@ pub(crate) fn pause_hotkey(mode: RecordingMode) {
     slot.regular_key.store(0, Ordering::SeqCst);
 }
 
-/// Disable all hotkey slots.
-#[allow(dead_code)]
-pub(crate) fn pause_all_hotkeys() {
-    for slot in &HOTKEY_SLOTS {
-        slot.modifier_mask.store(0, Ordering::SeqCst);
-        slot.regular_key.store(0, Ordering::SeqCst);
-    }
-}
-
 // CGEvent type constants
 const K_CG_EVENT_KEY_DOWN: u32 = 10;
 const K_CG_EVENT_KEY_UP: u32 = 11;

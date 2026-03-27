@@ -66,14 +66,6 @@ pub(crate) fn pause_hotkey(mode: RecordingMode) {
     slot.regular_key.store(0, Ordering::SeqCst);
 }
 
-/// Disable all hotkey slots.
-pub(crate) fn pause_all_hotkeys() {
-    for slot in &HOTKEY_SLOTS {
-        slot.modifier_mask.store(0, Ordering::SeqCst);
-        slot.regular_key.store(0, Ordering::SeqCst);
-    }
-}
-
 const MODES: [RecordingMode; 4] = [
     RecordingMode::Dictation,
     RecordingMode::Translate,
