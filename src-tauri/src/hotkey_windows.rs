@@ -48,6 +48,13 @@ pub(crate) fn pause_hotkey() {
     REGULAR_KEY.store(0, Ordering::SeqCst);
 }
 
+/// Temporarily pause all hotkey detection (settings panel open).
+#[allow(dead_code)]
+pub(crate) fn pause_all_hotkeys() {
+    pause_hotkey();
+    pause_translate_hotkey();
+}
+
 /// The active translate modifier virtual key code.
 static TRANSLATE_MODIFIER_MASK: AtomicU64 = AtomicU64::new(0);
 /// The translate regular key virtual key code.
