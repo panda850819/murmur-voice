@@ -452,6 +452,14 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
                     continue;
                 }
 
+                // Cap to last 10s (160k samples) to avoid repetition hallucinations
+                // on long recordings — Whisper degrades when re-transcribing long audio
+                let preview_samples = if samples.len() > 160_000 {
+                    &samples[samples.len() - 160_000..]
+                } else {
+                    &samples
+                };
+
                 let (language, initial_prompt) = ms
                     .settings
                     .lock()
@@ -467,7 +475,7 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
                         }
                     };
                     match engine_lock.as_ref() {
-                        Some(engine) => engine.transcribe(&samples, &language, &initial_prompt).unwrap_or_default(),
+                        Some(engine) => engine.transcribe(preview_samples, &language, &initial_prompt).unwrap_or_default(),
                         None => {
                             // Engine not ready yet — wait and retry on next loop iteration
                             drop(engine_lock);
