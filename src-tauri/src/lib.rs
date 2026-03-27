@@ -38,7 +38,7 @@ const PREVIEW_WINDOW_GAP: f64 = 8.0;
 const MAIN_WINDOW_WIDTH: f64 = 420.0;
 const MAIN_WINDOW_HEIGHT: f64 = 48.0;
 const MAIN_WINDOW_BOTTOM_MARGIN: f64 = 80.0;
-const MAIN_WINDOW_MAX_HEIGHT: f64 = 120.0;
+const MAIN_WINDOW_MAX_HEIGHT: f64 = 160.0;
 
 pub(crate) struct MurmurState {
     app_data_dir: PathBuf,
@@ -425,6 +425,7 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
         let handle = std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(1500));
             let mut last_text = String::new();
+            let mut locked_language: Option<String> = None;
 
             loop {
                 let ms = app_clone.state::<MurmurState>();
@@ -466,6 +467,14 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
                     .map(|s| (s.whisper_language().to_string(), s.whisper_initial_prompt()))
                     .unwrap_or_else(|_| ("auto".to_string(), String::new()));
 
+                // Lock language after first successful detection to prevent
+                // live preview flickering between languages on partial audio
+                let effective_language = if language == "auto" {
+                    locked_language.as_deref().unwrap_or("auto")
+                } else {
+                    &language
+                };
+
                 let text = {
                     let engine_lock = match ms.engine.try_lock() {
                         Ok(l) => l,
@@ -475,7 +484,7 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
                         }
                     };
                     match engine_lock.as_ref() {
-                        Some(engine) => engine.transcribe(preview_samples, &language, &initial_prompt).unwrap_or_default(),
+                        Some(engine) => engine.transcribe(preview_samples, effective_language, &initial_prompt).unwrap_or_default(),
                         None => {
                             // Engine not ready yet — wait and retry on next loop iteration
                             drop(engine_lock);
@@ -492,6 +501,19 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
                 if !text.is_empty() && text != last_text {
                     last_text = text.clone();
                     let _ = app_clone.emit(events::PARTIAL_TRANSCRIPTION, &text);
+
+                    // Lock detected language for subsequent peeks to prevent flickering
+                    if language == "auto" && locked_language.is_none() {
+                        let has_cjk = text.chars().any(|c| {
+                            ('\u{4e00}'..='\u{9fff}').contains(&c)
+                                || ('\u{3040}'..='\u{30ff}').contains(&c)
+                                || ('\u{ac00}'..='\u{d7af}').contains(&c)
+                        });
+                        if has_cjk {
+                            locked_language = Some("zh".to_string());
+                            log::info!("live preview: locked language to zh based on CJK content");
+                        }
+                    }
                 }
 
                 std::thread::sleep(std::time::Duration::from_secs(2));
@@ -891,8 +913,10 @@ fn position_main_window_bottom_center(window: &tauri::WebviewWindow, height: f64
 fn resize_main_window(app: tauri::AppHandle, height: f64) {
     let h = height.clamp(MAIN_WINDOW_HEIGHT, MAIN_WINDOW_MAX_HEIGHT);
     if let Some(w) = app.get_webview_window("main") {
-        let _ = w.set_size(tauri::LogicalSize::new(MAIN_WINDOW_WIDTH, h));
+        // Position first, then resize — reduces visual jank by moving
+        // the window to its final Y before it grows
         position_main_window_bottom_center(&w, h);
+        let _ = w.set_size(tauri::LogicalSize::new(MAIN_WINDOW_WIDTH, h));
     }
 }
 
