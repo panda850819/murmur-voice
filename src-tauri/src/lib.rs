@@ -422,6 +422,7 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
         let app_clone = app.clone();
         let handle = std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(1500));
+            let mut last_text = String::new();
 
             loop {
                 let ms = app_clone.state::<MurmurState>();
@@ -443,7 +444,8 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
                     }
                 };
 
-                if samples.len() < 3200 {
+                // Need at least 2s of audio (32000 samples @ 16kHz) for stable live preview
+                if samples.len() < 32_000 {
                     std::thread::sleep(std::time::Duration::from_secs(1));
                     continue;
                 }
@@ -477,7 +479,8 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
                     break;
                 }
 
-                if !text.is_empty() {
+                if !text.is_empty() && text != last_text {
+                    last_text = text.clone();
                     let _ = app_clone.emit(events::PARTIAL_TRANSCRIPTION, &text);
                 }
 
