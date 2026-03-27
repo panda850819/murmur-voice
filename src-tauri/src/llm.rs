@@ -89,6 +89,12 @@ CRITICAL: Output ONLY the cleaned transcription. Nothing else. No explanations, 
 
 /// Returns true if the text contains CJK characters.
 pub(crate) fn has_cjk(text: &str) -> bool {
+    // Fast path: if the text is entirely ASCII, it can't contain CJK.
+    // .is_ascii() is heavily optimized and avoids full UTF-8 decoding.
+    if text.is_ascii() {
+        return false;
+    }
+
     text.chars()
         .any(|c| matches!(c as u32, 0x4E00..=0x9FFF | 0x3400..=0x4DBF | 0xF900..=0xFAFF))
 }
@@ -110,7 +116,7 @@ fn protect_english(text: &str) -> (String, Vec<(String, String)>) {
         return (text.to_string(), Vec::new());
     }
 
-    let mut result = String::new();
+    let mut result = String::with_capacity(text.len());
     let mut placeholders = Vec::new();
     let mut chars = text.chars().peekable();
 
@@ -127,8 +133,8 @@ fn protect_english(text: &str) -> (String, Vec<(String, String)>) {
             }
             let idx = placeholders.len();
             let placeholder = format!("__E{idx}__");
-            placeholders.push((placeholder.clone(), word));
             result.push_str(&placeholder);
+            placeholders.push((placeholder, word));
         } else {
             result.push(c);
             chars.next();
@@ -140,10 +146,44 @@ fn protect_english(text: &str) -> (String, Vec<(String, String)>) {
 
 /// Restores English words from placeholders after LLM processing.
 fn restore_english(text: &str, placeholders: &[(String, String)]) -> String {
-    let mut result = text.to_string();
-    for (placeholder, original) in placeholders {
-        result = result.replace(placeholder, original);
+    if placeholders.is_empty() || !text.contains("__E") {
+        return text.to_string();
     }
+
+    // Fast path for single placeholder
+    if placeholders.len() == 1 {
+        let (placeholder, original) = &placeholders[0];
+        return text.replace(placeholder, original);
+    }
+
+    let mut result = String::with_capacity(text.len() + placeholders.len() * 5);
+    let mut rest = text;
+
+    while let Some(start) = rest.find("__E") {
+        result.push_str(&rest[..start]);
+        rest = &rest[start..];
+
+        let mut replaced = false;
+        if rest.len() >= 6 {
+            if let Some(end_offset) = rest[3..].find("__") {
+                let end_idx = 3 + end_offset + 2;
+                let placeholder = &rest[..end_idx];
+
+                if let Some((_, original)) = placeholders.iter().find(|(p, _)| p == placeholder) {
+                    result.push_str(original);
+                    rest = &rest[end_idx..];
+                    replaced = true;
+                }
+            }
+        }
+
+        if !replaced {
+            result.push_str("__E");
+            rest = &rest[3..];
+        }
+    }
+
+    result.push_str(rest);
     result
 }
 
