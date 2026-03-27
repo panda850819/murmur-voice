@@ -31,13 +31,27 @@ function expandMainBar() {
   appEl.classList.remove("collapsing");
 }
 
+const MIN_EXPANDED_HEIGHT = 80;
+
 function maybeExpandToFitContent() {
   if (!expandPending && !appEl.classList.contains("expanded")) return;
-  // Activate expanded layout on first text arrival
   if (expandPending) {
     expandPending = false;
-    appEl.classList.add("expanded");
-    transcription.classList.add("multiline");
+    // Resize window first so there's room before layout changes
+    recordingMaxHeight = MIN_EXPANDED_HEIGHT;
+    invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: MIN_EXPANDED_HEIGHT });
+    // Delay class addition by one frame so window has time to grow
+    requestAnimationFrame(() => {
+      appEl.classList.add("expanded");
+      transcription.classList.add("multiline");
+      // Re-measure after layout change
+      const neededHeight = appEl.scrollHeight + MAIN_BAR_MARGIN;
+      if (neededHeight > recordingMaxHeight) {
+        recordingMaxHeight = neededHeight;
+        invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: neededHeight });
+      }
+    });
+    return;
   }
   const neededHeight = appEl.scrollHeight + MAIN_BAR_MARGIN;
   if (neededHeight > recordingMaxHeight) {
