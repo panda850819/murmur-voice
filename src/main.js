@@ -113,11 +113,17 @@ window.addEventListener("DOMContentLoaded", async () => {
   await listen(EVENTS.ACCESSIBILITY_ERROR, () => {
     setStatus("error", t("state.accessibilityError"));
     transcription.textContent = t("state.accessibilityHint");
+    transcription.style.cursor = "pointer";
+    transcription.onclick = () => {
+      invoke(COMMANDS.OPEN_URL, { url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" }).catch(() => {});
+    };
   });
 
   await listen(EVENTS.ACCESSIBILITY_GRANTED, () => {
     setStatus(null, t("state.ready"));
     transcription.textContent = "";
+    transcription.style.cursor = "";
+    transcription.onclick = null;
   });
 
   await listen(EVENTS.RECORDING_ERROR, (event) => {
@@ -165,6 +171,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (!accessible) {
       setStatus("error", t("state.accessibilityError"));
       transcription.textContent = t("state.accessibilityHint");
+      transcription.style.cursor = "pointer";
+      transcription.onclick = () => {
+        invoke(COMMANDS.OPEN_URL, { url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" }).catch(() => {});
+      };
     }
   } catch (_) {}
 });

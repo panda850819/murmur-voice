@@ -1417,7 +1417,7 @@ pub fn run() {
                         let _ = app_handle.emit(events::ACCESSIBILITY_ERROR, ());
                         // Poll until Accessibility is granted, then retry
                         loop {
-                            std::thread::sleep(std::time::Duration::from_secs(3));
+                            std::thread::sleep(std::time::Duration::from_secs(1));
                             if is_accessibility_trusted() {
                                 hotkey::start_listener(retry_sender.clone());
                                 let _ = app_handle.emit(events::ACCESSIBILITY_GRANTED, ());
