@@ -64,16 +64,18 @@ CRITICAL: Output ONLY the cleaned transcription. Nothing else. No explanations, 
    - Chinese: full-width ，、。！？：；（）「」
    - English: half-width , . ! ? : ; ( ) " "
    - Add sentence-ending punctuation where missing
+   - IMPORTANT: Infer sentence type from context and intent:
+     - Only use ？/? for genuine questions (contains 嗎/呢/吧/何/幾/什麼/為什麼/怎麼, or who/what/where/when/why/how, or rising-tone interrogatives)
+     - Statements, commands, and declarations end with 。/. — do NOT add question marks to non-questions
+     - When uncertain, default to 。/. (period) — false question marks are worse than missing ones
 
 4. CONVERT Simplified Chinese → Traditional Chinese (zh-TW):
    - 设置 → 設定, 视频 → 影片, 信息 → 資訊, 服務器 → 伺服器
    - This ONLY applies to Chinese characters already in Chinese. NOT to English words.
 
-5. MIXED Chinese-English: add a space between Chinese and English/numbers.
+5. MIXED Chinese-English: add a space between Chinese and English/numbers. Do NOT modify English words — preserve original spelling and casing exactly.
 
 6. FORMAT: short utterances stay as single line. Lists get numbered. Long text gets paragraph breaks.
-
-7. PLACEHOLDERS: Text may contain tokens like __E0__, __E1__, etc. Leave them EXACTLY as-is. Do NOT modify, remove, or translate them.
 
 ## Constraints
 
@@ -112,49 +114,6 @@ pub(crate) fn detect_target_language(text: &str) -> &'static str {
     }
 }
 
-/// In mixed CJK+English text, replaces English words with numbered placeholders
-/// so the LLM cannot translate them. Pure English or pure CJK text is unchanged.
-fn protect_english(text: &str) -> (String, Vec<(String, String)>) {
-    if !has_cjk(text) || !text.chars().any(|c| c.is_ascii_alphabetic()) {
-        return (text.to_string(), Vec::new());
-    }
-
-    let mut result = String::new();
-    let mut placeholders = Vec::new();
-    let mut chars = text.chars().peekable();
-
-    while let Some(&c) = chars.peek() {
-        if c.is_ascii_alphabetic() {
-            let mut word = String::new();
-            while let Some(&c) = chars.peek() {
-                if c.is_ascii_alphanumeric() {
-                    word.push(c);
-                    chars.next();
-                } else {
-                    break;
-                }
-            }
-            let idx = placeholders.len();
-            let placeholder = format!("__E{idx}__");
-            placeholders.push((placeholder.clone(), word));
-            result.push_str(&placeholder);
-        } else {
-            result.push(c);
-            chars.next();
-        }
-    }
-
-    (result, placeholders)
-}
-
-/// Restores English words from placeholders after LLM processing.
-fn restore_english(text: &str, placeholders: &[(String, String)]) -> String {
-    let mut result = text.to_string();
-    for (placeholder, original) in placeholders {
-        result = result.replace(placeholder, original);
-    }
-    result
-}
 
 /// Remove common preamble/prefix patterns that LLMs add despite instructions.
 fn strip_llm_prefix(text: &str) -> &str {
@@ -327,9 +286,9 @@ impl TextEnhancer for OpenAICompatibleEnhancer {
     }
 
     fn enhance(&self, text: &str, style: &str) -> Result<String, LlmError> {
-        let (protected_text, placeholders) = protect_english(text);
+        log::debug!("LLM enhance input: {text}");
 
-        let max_tokens = (protected_text.len() * 2).clamp(256, 2048) as u64;
+        let max_tokens = (text.len() * 2).clamp(256, 2048) as u64;
 
         let mut body = serde_json::json!({
             "model": &self.model,
@@ -340,7 +299,7 @@ impl TextEnhancer for OpenAICompatibleEnhancer {
                 },
                 {
                     "role": "user",
-                    "content": format!("[Raw transcription to clean up]\n{protected_text}")
+                    "content": format!("[Raw transcription to clean up]\n{text}")
                 }
             ],
             "temperature": 0.1,
@@ -349,7 +308,7 @@ impl TextEnhancer for OpenAICompatibleEnhancer {
 
         // Only add frequency_penalty for non-Ollama providers (Ollama may not support it)
         if !self.local {
-            body["frequency_penalty"] = serde_json::json!(1.5);
+            body["frequency_penalty"] = serde_json::json!(0.3);
         }
 
         let rt = tokio::runtime::Runtime::new()
@@ -386,13 +345,8 @@ impl TextEnhancer for OpenAICompatibleEnhancer {
             .message
             .content;
 
-        let cleaned = strip_llm_prefix(content.trim());
-
-        let result = if placeholders.is_empty() {
-            cleaned.to_string()
-        } else {
-            restore_english(cleaned, &placeholders)
-        };
+        let result = strip_llm_prefix(content.trim()).to_string();
+        log::debug!("LLM enhance output: {result}");
 
         Ok(result)
     }
@@ -539,7 +493,18 @@ pub(crate) async fn transcribe_groq(
     }
 
     if !initial_prompt.is_empty() {
-        form = form.text("prompt", initial_prompt.to_string());
+        // Groq Whisper API limits prompt to 896 characters
+        let prompt = if initial_prompt.len() > 896 {
+            // Truncate at char boundary
+            let mut end = 896;
+            while !initial_prompt.is_char_boundary(end) {
+                end -= 1;
+            }
+            &initial_prompt[..end]
+        } else {
+            initial_prompt
+        };
+        form = form.text("prompt", prompt.to_string());
     }
 
     let client = reqwest::Client::new();
@@ -659,68 +624,6 @@ mod tests {
         assert!(has_cjk("Hello 你好"));
         assert!(has_cjk("これは漢字です")); // Contains Kanji (CJK Unified Ideographs)
         assert!(!has_cjk("これはひらがなです")); // Pure Hiragana - not in the current CJK ranges
-    }
-
-    #[test]
-    fn test_protect_english() {
-        // No CJK -> no change
-        let (text, placeholders) = protect_english("Hello world");
-        assert_eq!(text, "Hello world");
-        assert!(placeholders.is_empty());
-
-        // No English letters -> no change
-        let (text, placeholders) = protect_english("你好世界 123");
-        assert_eq!(text, "你好世界 123");
-        assert!(placeholders.is_empty());
-
-        // Mixed text -> placeholders
-        let (text, placeholders) = protect_english("你好 Hello 世界 World");
-        assert_eq!(text, "你好 __E0__ 世界 __E1__");
-        assert_eq!(placeholders.len(), 2);
-        assert_eq!(placeholders[0], ("__E0__".to_string(), "Hello".to_string()));
-        assert_eq!(placeholders[1], ("__E1__".to_string(), "World".to_string()));
-
-        // Word with numbers (alphanumeric)
-        let (text, placeholders) = protect_english("你好 V2 引擎");
-        assert_eq!(text, "你好 __E0__ 引擎");
-        assert_eq!(placeholders[0].1, "V2");
-
-        // Punctuation is preserved
-        let (text, placeholders) = protect_english("你好, Hello!");
-        assert_eq!(text, "你好, __E0__!");
-        assert_eq!(placeholders[0].1, "Hello");
-    }
-
-    #[test]
-    fn test_restore_english() {
-        let placeholders = vec![
-            ("__E0__".to_string(), "Hello".to_string()),
-            ("__E1__".to_string(), "World".to_string()),
-        ];
-
-        // Normal restoration
-        assert_eq!(
-            restore_english("你好 __E0__ 世界 __E1__", &placeholders),
-            "你好 Hello 世界 World"
-        );
-
-        // Multiple occurrences of same placeholder (if LLM repeats it)
-        assert_eq!(
-            restore_english("__E0__ and __E0__", &placeholders),
-            "Hello and Hello"
-        );
-
-        // No placeholders in text
-        assert_eq!(
-            restore_english("你好世界", &placeholders),
-            "你好世界"
-        );
-
-        // Empty placeholders list
-        assert_eq!(
-            restore_english("你好 __E0__", &[]),
-            "你好 __E0__"
-        );
     }
 
     #[test]

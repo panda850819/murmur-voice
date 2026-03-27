@@ -354,6 +354,22 @@ window.addEventListener("DOMContentLoaded", async () => {
     reset();
   });
 
+  await listen(EVENTS.RECORDING_ERROR, (event) => {
+    clearAutoHide();
+    setHeader(t("state.error"), false);
+    setText(event.payload, "no-speech");
+    copyBtn().classList.add("hidden");
+    closeBtn().classList.remove("hidden");
+    translateBtn().classList.add("hidden");
+    disableEditing();
+    // Auto-hide after 8s
+    autoHideTimer = setTimeout(async () => {
+      try {
+        await invoke(COMMANDS.HIDE_OVERLAY_WINDOWS);
+      } catch (_) {}
+    }, 8000);
+  });
+
   await listen(EVENTS.PARTIAL_TRANSCRIPTION, (event) => {
     const text = event.payload;
     if (text) {

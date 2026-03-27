@@ -219,7 +219,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     setTimeout(() => {
       setStatus(null, t("state.ready"));
       transcription.textContent = "";
-    }, 3000);
+    }, 8000);
   });
 
   await listen(EVENTS.RECORDING_CANCELLED, () => {
