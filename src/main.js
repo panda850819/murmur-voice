@@ -7,6 +7,11 @@ let transcription;
 let progressContainer;
 let progressBar;
 let appBadge;
+let appEl;
+let isRecording = false;
+let isCollapsing = false;
+let recordingMaxHeight = 0;
+let resizeDebounceTimer = null;
 
 function setStatus(state, text) {
   const dot = statusDot;
@@ -17,6 +22,46 @@ function setStatus(state, text) {
   statusText.textContent = text;
 }
 
+function expandMainBar() {
+  isRecording = true;
+  isCollapsing = false;
+  recordingMaxHeight = 0;
+  appEl.classList.remove("collapsing");
+  appEl.classList.add("expanded");
+  transcription.classList.add("multiline");
+}
+
+function collapseMainBar() {
+  isRecording = false;
+  isCollapsing = true;
+  appEl.classList.remove("expanded");
+  transcription.classList.remove("multiline");
+  transcription.textContent = "";
+  appEl.classList.add("collapsing");
+  // Directly invoke resize to 48px (bypass ResizeObserver)
+  invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: 48 });
+  // Clear collapsing flag after transition
+  appEl.addEventListener("transitionend", () => {
+    isCollapsing = false;
+    appEl.classList.remove("collapsing");
+  }, { once: true });
+  // Fallback: clear flag after 200ms if transitionend doesn't fire
+  setTimeout(() => {
+    isCollapsing = false;
+    appEl.classList.remove("collapsing");
+  }, 200);
+}
+
+function resetMainBar() {
+  // Immediate reset without animation (error/cancel)
+  isRecording = false;
+  isCollapsing = false;
+  recordingMaxHeight = 0;
+  appEl.classList.remove("expanded", "collapsing");
+  transcription.classList.remove("multiline");
+  invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: 48 });
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
   statusDot = document.getElementById("status-dot");
   statusText = document.getElementById("status-text");
@@ -24,6 +69,27 @@ window.addEventListener("DOMContentLoaded", async () => {
   progressContainer = document.getElementById("progress-container");
   progressBar = document.getElementById("progress-bar");
   appBadge = document.getElementById("app-badge");
+  appEl = document.getElementById("app");
+
+  // ResizeObserver: notify backend when #app height changes during recording
+  const resizeObserver = new ResizeObserver((entries) => {
+    if (isCollapsing) return;
+    if (!isRecording) return;
+    const entry = entries[0];
+    const newHeight = entry.contentBoxSize?.[0]?.blockSize
+      ?? entry.contentRect.height;
+    // Add margin (4px top + 4px bottom = 8px)
+    const windowHeight = newHeight + 8;
+    // Expand-only: never shrink during recording
+    if (windowHeight <= recordingMaxHeight) return;
+    recordingMaxHeight = windowHeight;
+    // Debounce backend calls
+    clearTimeout(resizeDebounceTimer);
+    resizeDebounceTimer = setTimeout(() => {
+      invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: windowHeight });
+    }, 50);
+  });
+  resizeObserver.observe(appEl);
 
   // Load locale
   try {
@@ -52,6 +118,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       case RECORDING_STATES.STARTING:
         setStatus("recording", t("state.starting"));
         transcription.textContent = "";
+        expandMainBar();
         break;
       case RECORDING_STATES.RECORDING:
         setStatus("recording", t("state.listening"));
@@ -61,6 +128,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         break;
       case RECORDING_STATES.TRANSCRIBING:
         setStatus("transcribing", t("state.transcribing"));
+        // Stay expanded during transcription
         break;
       case RECORDING_STATES.PROCESSING:
         setStatus("transcribing", t("state.processing"));
@@ -73,6 +141,9 @@ window.addEventListener("DOMContentLoaded", async () => {
         setStatus(null, t("state.ready"));
         appBadge.classList.remove("visible");
         appBadge.textContent = "";
+        if (isRecording || appEl.classList.contains("expanded")) {
+          collapseMainBar();
+        }
         break;
       case "downloading_model":
         progressContainer.classList.remove("hidden");
@@ -88,6 +159,9 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   await listen(EVENTS.TRANSCRIPTION_COMPLETE, (event) => {
     const { text } = event.payload;
+    if (appEl.classList.contains("expanded")) {
+      collapseMainBar();
+    }
     transcription.textContent = text || "";
     setStatus("done", t("state.done"));
 
@@ -128,6 +202,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   await listen(EVENTS.RECORDING_ERROR, (event) => {
     const errorMsg = event.payload;
+    resetMainBar();
     transcription.textContent = errorMsg;
     setStatus("error", t("state.error"));
 
@@ -138,8 +213,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   await listen(EVENTS.RECORDING_CANCELLED, () => {
+    resetMainBar();
     setStatus("error", t("state.cancelled"));
-    transcription.textContent = "";
 
     setTimeout(() => {
       setStatus(null, t("state.ready"));
