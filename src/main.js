@@ -22,16 +22,23 @@ function setStatus(state, text) {
   statusText.textContent = text;
 }
 
+let expandPending = false;
+
 function expandMainBar() {
   isCollapsing = false;
   recordingMaxHeight = 0;
+  expandPending = true;
   appEl.classList.remove("collapsing");
-  appEl.classList.add("expanded");
-  transcription.classList.add("multiline");
 }
 
 function maybeExpandToFitContent() {
-  if (!appEl.classList.contains("expanded")) return;
+  if (!expandPending && !appEl.classList.contains("expanded")) return;
+  // Activate expanded layout on first text arrival
+  if (expandPending) {
+    expandPending = false;
+    appEl.classList.add("expanded");
+    transcription.classList.add("multiline");
+  }
   const neededHeight = appEl.scrollHeight + MAIN_BAR_MARGIN;
   if (neededHeight > recordingMaxHeight) {
     recordingMaxHeight = neededHeight;
@@ -42,6 +49,7 @@ function maybeExpandToFitContent() {
 function collapseMainBar() {
   if (isCollapsing) return;
   isCollapsing = true;
+  expandPending = false;
   appEl.classList.remove("expanded");
   transcription.classList.remove("multiline");
   transcription.textContent = "";
@@ -60,6 +68,7 @@ function collapseMainBar() {
 
 function resetMainBar() {
   isCollapsing = false;
+  expandPending = false;
   recordingMaxHeight = 0;
   appEl.classList.remove("expanded", "collapsing");
   transcription.classList.remove("multiline");
@@ -125,7 +134,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         setStatus(null, t("state.ready"));
         appBadge.classList.remove("visible");
         appBadge.textContent = "";
-        if (appEl.classList.contains("expanded")) {
+        if (expandPending || appEl.classList.contains("expanded")) {
           collapseMainBar();
         }
         break;

@@ -28,7 +28,7 @@ html, body {
 
 #app.expanded {
   flex-wrap: wrap;
-  align-content: flex-end;
+  align-content: flex-start;
   padding: 8px 16px;
   transition: none;
 }
