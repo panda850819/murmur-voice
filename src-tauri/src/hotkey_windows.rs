@@ -8,61 +8,116 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
 
+use crate::state::RecordingMode;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum HotkeyEvent {
-    Pressed,
-    Released,
+    Pressed(RecordingMode),
+    Released(RecordingMode),
     EscCancel,
     EventTapFailed,
-    TranslatePressed,
 }
 
-/// The active PTT modifier virtual key code. Updated at runtime via settings.
-/// Default: VK_LMENU (Left Alt) = 0xA4
-static MODIFIER_MASK: AtomicU64 = AtomicU64::new(0xA4);
+/// A hotkey slot with atomic modifier mask and regular key.
+struct HotkeySlot {
+    modifier_mask: AtomicU64,
+    regular_key: AtomicU32,
+}
 
-/// The regular key virtual key code for combo mode (0 = modifier-only mode).
-static REGULAR_KEY: AtomicU32 = AtomicU32::new(0);
+impl HotkeySlot {
+    const fn new() -> Self {
+        Self {
+            modifier_mask: AtomicU64::new(0),
+            regular_key: AtomicU32::new(0),
+        }
+    }
+}
+
+/// 4 slots indexed by RecordingMode as usize:
+/// [0] = Dictation, [1] = Translate, [2] = VoiceCommand, [3] = ClipboardRewrite
+static HOTKEY_SLOTS: [HotkeySlot; 4] = [
+    HotkeySlot::new(),
+    HotkeySlot::new(),
+    HotkeySlot::new(),
+    HotkeySlot::new(),
+];
 
 /// Track whether the hotkey is currently held down (edge detection, modifier-only mode).
 static KEY_WAS_DOWN: AtomicBool = AtomicBool::new(false);
 
-/// Track whether the modifier key is currently held (combo mode).
-static MODIFIER_HELD: AtomicBool = AtomicBool::new(false);
-
-/// Track whether the combo is currently active (combo mode).
+/// Track whether a combo is currently active.
 static COMBO_ACTIVE: AtomicBool = AtomicBool::new(false);
+static COMBO_ACTIVE_SLOT: AtomicU32 = AtomicU32::new(u32::MAX);
+
+/// Track modifier held state per slot for combo detection.
+static MODIFIER_HELD: AtomicBool = AtomicBool::new(false);
+static MODIFIER_HELD_SLOT: AtomicU32 = AtomicU32::new(u32::MAX);
 
 /// Global sender for the hook callback. Set once before installing the hook.
 static mut GLOBAL_SENDER: Option<mpsc::Sender<HotkeyEvent>> = None;
 
-/// Update the PTT hotkey target (modifier VK code + regular key VK code) at runtime.
+/// Update a hotkey slot for the given mode.
+pub(crate) fn set_hotkey(mode: RecordingMode, modifier: u64, regular_key: u32) {
+    let slot = &HOTKEY_SLOTS[mode as usize];
+    slot.modifier_mask.store(modifier, Ordering::SeqCst);
+    slot.regular_key.store(regular_key, Ordering::SeqCst);
+}
+
+/// Disable a specific hotkey slot (set mask to 0).
+pub(crate) fn pause_hotkey(mode: RecordingMode) {
+    let slot = &HOTKEY_SLOTS[mode as usize];
+    slot.modifier_mask.store(0, Ordering::SeqCst);
+    slot.regular_key.store(0, Ordering::SeqCst);
+}
+
+/// Disable all hotkey slots.
+pub(crate) fn pause_all_hotkeys() {
+    for slot in &HOTKEY_SLOTS {
+        slot.modifier_mask.store(0, Ordering::SeqCst);
+        slot.regular_key.store(0, Ordering::SeqCst);
+    }
+}
+
+// --- Legacy shim functions ---
+
 pub(crate) fn set_hotkey_target(modifier: u64, regular_key: u32) {
-    MODIFIER_MASK.store(modifier, Ordering::SeqCst);
-    REGULAR_KEY.store(regular_key, Ordering::SeqCst);
+    set_hotkey(RecordingMode::Dictation, modifier, regular_key);
 }
 
-/// Temporarily pause hotkey detection (set mask to 0 so nothing matches).
-pub(crate) fn pause_hotkey() {
-    MODIFIER_MASK.store(0, Ordering::SeqCst);
-    REGULAR_KEY.store(0, Ordering::SeqCst);
-}
-
-/// The active translate modifier virtual key code.
-static TRANSLATE_MODIFIER_MASK: AtomicU64 = AtomicU64::new(0);
-/// The translate regular key virtual key code.
-static TRANSLATE_REGULAR_KEY: AtomicU32 = AtomicU32::new(0);
-
-/// Update the translate hotkey target at runtime.
 pub(crate) fn set_translate_target(modifier: u64, regular_key: u32) {
-    TRANSLATE_MODIFIER_MASK.store(modifier, Ordering::SeqCst);
-    TRANSLATE_REGULAR_KEY.store(regular_key, Ordering::SeqCst);
+    set_hotkey(RecordingMode::Translate, modifier, regular_key);
 }
 
-/// Temporarily pause translate hotkey detection.
+pub(crate) fn pause_hotkey_legacy() {
+    pause_hotkey(RecordingMode::Dictation);
+}
+
 pub(crate) fn pause_translate_hotkey() {
-    TRANSLATE_MODIFIER_MASK.store(0, Ordering::SeqCst);
-    TRANSLATE_REGULAR_KEY.store(0, Ordering::SeqCst);
+    pause_hotkey(RecordingMode::Translate);
+}
+
+const MODES: [RecordingMode; 4] = [
+    RecordingMode::Dictation,
+    RecordingMode::Translate,
+    RecordingMode::VoiceCommand,
+    RecordingMode::ClipboardRewrite,
+];
+
+/// Match order: combo-only modes first (more specific), modifier-only last.
+const MATCH_ORDER: [usize; 4] = [2, 3, 1, 0];
+
+/// Check if all packed modifier VK codes are currently held.
+fn all_modifiers_held(packed: u64) -> bool {
+    for i in 0..4u32 {
+        let vk = ((packed >> (i * 16)) & 0xFFFF) as i32;
+        if vk == 0 {
+            break;
+        }
+        if unsafe { GetAsyncKeyState(vk) } >= 0 {
+            return false;
+        }
+    }
+    true
 }
 
 unsafe extern "system" fn keyboard_hook_proc(
@@ -72,84 +127,77 @@ unsafe extern "system" fn keyboard_hook_proc(
 ) -> LRESULT {
     if n_code >= 0 {
         let kb = &*(l_param.0 as *const KBDLLHOOKSTRUCT);
-        let modifier_vk = MODIFIER_MASK.load(Ordering::SeqCst) as u32;
-        let regular_vk = REGULAR_KEY.load(Ordering::SeqCst);
         let msg = w_param.0 as u32;
         let is_down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
         let is_up = msg == WM_KEYUP || msg == WM_SYSKEYUP;
 
-        // ESC key detection — cancel recording regardless of hotkey mode
+        // ESC key detection
         if kb.vkCode == 0x1B && is_down {
             if let Some(ref sender) = GLOBAL_SENDER {
                 let _ = sender.send(HotkeyEvent::EscCancel);
             }
-            // Pass through to other apps (don't return early with LRESULT(1))
         }
 
-        // Translate hotkey detection — always a combo (modifier(s)+key)
-        let tr_modifier_packed = TRANSLATE_MODIFIER_MASK.load(Ordering::SeqCst);
-        let tr_regular_vk = TRANSLATE_REGULAR_KEY.load(Ordering::SeqCst);
-        if tr_regular_vk != 0 && tr_modifier_packed != 0 {
+        // --- Combo hotkey detection (key-down) ---
+        if is_down && !COMBO_ACTIVE.load(Ordering::SeqCst) {
             if let Some(ref sender) = GLOBAL_SENDER {
-                if kb.vkCode == tr_regular_vk && is_down {
-                    // Check all packed modifier VK codes (16-bit slots)
-                    let mut all_mods_held = true;
-                    for i in 0..4u32 {
-                        let vk = ((tr_modifier_packed >> (i * 16)) & 0xFFFF) as i32;
-                        if vk == 0 { break; }
-                        if unsafe { GetAsyncKeyState(vk) } >= 0 {
-                            all_mods_held = false;
-                            break;
-                        }
+                for &idx in &MATCH_ORDER {
+                    let slot = &HOTKEY_SLOTS[idx];
+                    let mask = slot.modifier_mask.load(Ordering::SeqCst);
+                    let rk = slot.regular_key.load(Ordering::SeqCst);
+                    if mask == 0 || rk == 0 {
+                        continue;
                     }
-                    if all_mods_held {
-                        let _ = sender.send(HotkeyEvent::TranslatePressed);
-                        return LRESULT(1); // consume the key event
-                    }
-                }
-            }
-        }
-
-        if regular_vk != 0 {
-            // Combo mode: modifier + regular key
-            if let Some(ref sender) = GLOBAL_SENDER {
-                if kb.vkCode == modifier_vk {
-                    if is_down {
-                        MODIFIER_HELD.store(true, Ordering::SeqCst);
-                    } else if is_up {
-                        MODIFIER_HELD.store(false, Ordering::SeqCst);
-                        if COMBO_ACTIVE.load(Ordering::SeqCst) {
-                            COMBO_ACTIVE.store(false, Ordering::SeqCst);
-                            let _ = sender.send(HotkeyEvent::Released);
-                        }
-                    }
-                } else if kb.vkCode == regular_vk {
-                    if is_down
-                        && MODIFIER_HELD.load(Ordering::SeqCst)
-                        && !COMBO_ACTIVE.load(Ordering::SeqCst)
-                    {
+                    if kb.vkCode == rk && all_modifiers_held(mask) {
                         COMBO_ACTIVE.store(true, Ordering::SeqCst);
-                        let _ = sender.send(HotkeyEvent::Pressed);
-                        return LRESULT(1);
-                    } else if is_up && COMBO_ACTIVE.load(Ordering::SeqCst) {
-                        COMBO_ACTIVE.store(false, Ordering::SeqCst);
-                        let _ = sender.send(HotkeyEvent::Released);
-                        return LRESULT(1);
+                        COMBO_ACTIVE_SLOT.store(idx as u32, Ordering::SeqCst);
+                        let _ = sender.send(HotkeyEvent::Pressed(MODES[idx]));
+                        return LRESULT(1); // consume
                     }
                 }
             }
-        } else {
-            // Modifier-only mode (unchanged)
-            if kb.vkCode == modifier_vk {
+        }
+
+        // --- Combo release (regular key up) ---
+        if is_up && COMBO_ACTIVE.load(Ordering::SeqCst) {
+            let active_idx = COMBO_ACTIVE_SLOT.load(Ordering::SeqCst) as usize;
+            if active_idx < 4 {
+                let slot = &HOTKEY_SLOTS[active_idx];
+                let rk = slot.regular_key.load(Ordering::SeqCst);
+                if kb.vkCode == rk {
+                    COMBO_ACTIVE.store(false, Ordering::SeqCst);
+                    if let Some(ref sender) = GLOBAL_SENDER {
+                        let _ = sender.send(HotkeyEvent::Released(MODES[active_idx]));
+                    }
+                    return LRESULT(1); // consume
+                }
+                // Modifier released while combo active
+                let mask = slot.modifier_mask.load(Ordering::SeqCst);
+                let first_vk = (mask & 0xFFFF) as u32;
+                if kb.vkCode == first_vk {
+                    COMBO_ACTIVE.store(false, Ordering::SeqCst);
+                    if let Some(ref sender) = GLOBAL_SENDER {
+                        let _ = sender.send(HotkeyEvent::Released(MODES[active_idx]));
+                    }
+                }
+            }
+        }
+
+        // --- Modifier-only mode (Dictation slot, when regular_key == 0) ---
+        let dict_slot = &HOTKEY_SLOTS[0];
+        let dict_mask = dict_slot.modifier_mask.load(Ordering::SeqCst);
+        let dict_rk = dict_slot.regular_key.load(Ordering::SeqCst);
+        if dict_rk == 0 && dict_mask != 0 && !COMBO_ACTIVE.load(Ordering::SeqCst) {
+            let dict_vk = (dict_mask & 0xFFFF) as u32;
+            if kb.vkCode == dict_vk {
                 if let Some(ref sender) = GLOBAL_SENDER {
                     let was_down = KEY_WAS_DOWN.load(Ordering::SeqCst);
-
                     if is_down && !was_down {
                         KEY_WAS_DOWN.store(true, Ordering::SeqCst);
-                        let _ = sender.send(HotkeyEvent::Pressed);
+                        let _ = sender.send(HotkeyEvent::Pressed(RecordingMode::Dictation));
                     } else if is_up && was_down {
                         KEY_WAS_DOWN.store(false, Ordering::SeqCst);
-                        let _ = sender.send(HotkeyEvent::Released);
+                        let _ = sender.send(HotkeyEvent::Released(RecordingMode::Dictation));
                     }
                 }
             }

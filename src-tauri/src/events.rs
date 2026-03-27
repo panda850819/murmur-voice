@@ -15,6 +15,7 @@ pub const ACCESSIBILITY_ERROR: &str = "accessibility_error";
 pub const ACCESSIBILITY_GRANTED: &str = "accessibility_granted";
 pub const ENHANCER_INFO: &str = "enhancer_info";
 pub const RECORDING_CANCELLED: &str = "recording_cancelled";
+pub const RECORDING_MODE_INFO: &str = "recording_mode_info";
 
 // --- Recording state strings ---
 pub const STATE_IDLE: &str = "idle";
@@ -29,3 +30,9 @@ pub const STATE_TRANSLATING: &str = "translating";
 pub const MODE_PASTED: &str = "pasted";
 pub const MODE_CLIPBOARD: &str = "clipboard";
 pub const MODE_TRANSLATED: &str = "translated";
+#[allow(dead_code)]
+pub const MODE_DICTATED: &str = "dictated";
+#[allow(dead_code)]
+pub const MODE_VOICE_COMMAND: &str = "voice_command";
+#[allow(dead_code)]
+pub const MODE_CLIPBOARD_REWRITE: &str = "clipboard_rewrite";

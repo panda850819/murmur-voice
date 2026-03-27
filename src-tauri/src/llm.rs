@@ -85,6 +85,15 @@ CRITICAL: Output ONLY the cleaned transcription. Nothing else. No explanations, 
     )
 }
 
+fn build_command_prompt() -> &'static str {
+    r#"You are a text processing assistant. The user gives you a voice command and a piece of text. Execute the command on the text. Output ONLY the processed result — no explanations, no markdown formatting, no preamble."#
+}
+
+/// Format the user message for execute_command with command and context.
+fn format_command_user_message(command: &str, context: &str, context_type: &str) -> String {
+    format!("[Voice command]: {command}\n[{context_type}]: {context}")
+}
+
 // --- English word protection for mixed-language text ---
 
 /// Returns true if the text contains CJK characters.
@@ -208,6 +217,9 @@ pub(crate) trait TextEnhancer: Send + Sync {
     fn name(&self) -> &str;
     fn is_local(&self) -> bool;
     fn enhance(&self, text: &str, style: &str) -> Result<String, LlmError>;
+    /// Execute a voice command on a piece of context text.
+    /// Used by VoiceCommand and ClipboardRewrite modes.
+    fn execute_command(&self, command: &str, context: &str, context_type: &str) -> Result<String, LlmError>;
 }
 
 /// OpenAI-compatible LLM provider. Covers Groq, Ollama, and any custom endpoint.
@@ -249,6 +261,59 @@ impl OpenAICompatibleEnhancer {
             local: false,
             provider_name: "Custom".to_string(),
         }
+    }
+
+    /// Shared method to call the OpenAI-compatible chat completion API.
+    fn chat_completion(&self, system_prompt: &str, user_message: &str, temperature: f64, max_tokens: u64) -> Result<String, LlmError> {
+        let mut body = serde_json::json!({
+            "model": &self.model,
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user", "content": user_message }
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        });
+
+        if !self.local {
+            body["frequency_penalty"] = serde_json::json!(0.0);
+        }
+
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e| LlmError::Api(format!("failed to create runtime: {e}")))?;
+
+        let response = rt.block_on(async {
+            let client = reqwest::Client::new();
+            let mut req = client
+                .post(&self.api_url)
+                .header("Content-Type", "application/json")
+                .json(&body);
+
+            if !self.api_key.is_empty() {
+                req = req.header("Authorization", format!("Bearer {}", self.api_key));
+            }
+
+            req.send().await
+        })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body_text = rt
+                .block_on(response.text())
+                .unwrap_or_else(|e| format!("(failed to read body: {e})"));
+            return Err(LlmError::Api(format!("{status}: {body_text}")));
+        }
+
+        let chat: ChatResponse = rt.block_on(response.json())?;
+        let content = chat
+            .choices
+            .into_iter()
+            .next()
+            .ok_or(LlmError::Format)?
+            .message
+            .content;
+
+        Ok(content.trim().to_string())
     }
 }
 
@@ -331,6 +396,14 @@ impl TextEnhancer for OpenAICompatibleEnhancer {
 
         Ok(result)
     }
+
+    fn execute_command(&self, command: &str, context: &str, context_type: &str) -> Result<String, LlmError> {
+        let system_prompt = build_command_prompt();
+        let user_message = format_command_user_message(command, context, context_type);
+        let max_tokens = (context.len() * 4).clamp(256, 4096) as u64;
+
+        self.chat_completion(system_prompt, &user_message, 0.3, max_tokens)
+    }
 }
 
 /// Creates the appropriate TextEnhancer based on current settings.
@@ -375,56 +448,7 @@ impl OpenAICompatibleEnhancer {
     pub(crate) fn translate(&self, text: &str, target_language: &str) -> Result<String, LlmError> {
         let prompt = build_translate_prompt(target_language);
         let max_tokens = (text.len() * 4).clamp(256, 4096) as u64;
-
-        let mut body = serde_json::json!({
-            "model": &self.model,
-            "messages": [
-                { "role": "system", "content": prompt },
-                { "role": "user", "content": text }
-            ],
-            "temperature": 0.3,
-            "max_tokens": max_tokens,
-        });
-
-        if !self.local {
-            body["frequency_penalty"] = serde_json::json!(0.0);
-        }
-
-        let rt = tokio::runtime::Runtime::new()
-            .map_err(|e| LlmError::Api(format!("failed to create runtime: {e}")))?;
-
-        let response = rt.block_on(async {
-            let client = reqwest::Client::new();
-            let mut req = client
-                .post(&self.api_url)
-                .header("Content-Type", "application/json")
-                .json(&body);
-
-            if !self.api_key.is_empty() {
-                req = req.header("Authorization", format!("Bearer {}", self.api_key));
-            }
-
-            req.send().await
-        })?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body_text = rt
-                .block_on(response.text())
-                .unwrap_or_else(|e| format!("(failed to read body: {e})"));
-            return Err(LlmError::Api(format!("{status}: {body_text}")));
-        }
-
-        let chat: ChatResponse = rt.block_on(response.json())?;
-        let content = chat
-            .choices
-            .into_iter()
-            .next()
-            .ok_or(LlmError::Format)?
-            .message
-            .content;
-
-        Ok(content.trim().to_string())
+        self.chat_completion(&prompt, text, 0.3, max_tokens)
     }
 }
 
@@ -788,5 +812,29 @@ mod tests {
         assert_eq!(detect_target_language("This is a test."), "zh");
         // Numbers only → Chinese (no CJK)
         assert_eq!(detect_target_language("12345"), "zh");
+    }
+
+    // --- execute_command tests ---
+
+    #[test]
+    fn test_build_command_prompt() {
+        let prompt = build_command_prompt();
+        assert!(prompt.contains("text processing assistant"));
+        assert!(prompt.contains("voice command"));
+        assert!(prompt.contains("Output ONLY the processed result"));
+    }
+
+    #[test]
+    fn test_format_command_user_message() {
+        let msg = format_command_user_message("make this formal", "hey what's up", "Selected text");
+        assert!(msg.contains("[Voice command]: make this formal"));
+        assert!(msg.contains("[Selected text]: hey what's up"));
+    }
+
+    #[test]
+    fn test_format_command_user_message_clipboard() {
+        let msg = format_command_user_message("summarize", "long text here", "Clipboard content");
+        assert!(msg.contains("[Voice command]: summarize"));
+        assert!(msg.contains("[Clipboard content]: long text here"));
     }
 }

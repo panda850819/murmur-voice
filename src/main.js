@@ -140,6 +140,15 @@ window.addEventListener("DOMContentLoaded", async () => {
     }, 2000);
   });
 
+
+  await listen(EVENTS.RECORDING_MODE_INFO, (event) => {
+    const mode = event.payload;
+    const modeKey = 'mode.' + mode;
+    const modeText = t(modeKey);
+    if (modeText && modeText !== modeKey) {
+      transcription.textContent = modeText;
+    }
+  });
   // Right-click to open settings
   document.addEventListener("contextmenu", (e) => {
     e.preventDefault();

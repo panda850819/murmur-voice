@@ -2,49 +2,85 @@ use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc;
 
+use crate::state::RecordingMode;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum HotkeyEvent {
-    Pressed,
-    Released,
+    Pressed(RecordingMode),
+    Released(RecordingMode),
     EscCancel,
     EventTapFailed,
-    TranslatePressed,
 }
 
-/// The active PTT modifier mask. Updated at runtime via settings.
-/// Default: Left Option (NX_DEVICELALTKEYMASK = 0x20)
-static MODIFIER_MASK: AtomicU64 = AtomicU64::new(0x20);
+/// A hotkey slot with atomic modifier mask and regular key.
+struct HotkeySlot {
+    modifier_mask: AtomicU64,
+    regular_key: AtomicU32,
+}
 
-/// The regular key CGKeyCode for combo mode (0 = modifier-only mode).
-static REGULAR_KEY: AtomicU32 = AtomicU32::new(0);
+impl HotkeySlot {
+    const fn new() -> Self {
+        Self {
+            modifier_mask: AtomicU64::new(0),
+            regular_key: AtomicU32::new(0),
+        }
+    }
+}
 
-/// Update the PTT hotkey target at runtime.
+/// 4 slots indexed by RecordingMode as usize:
+/// [0] = Dictation, [1] = Translate, [2] = VoiceCommand, [3] = ClipboardRewrite
+static HOTKEY_SLOTS: [HotkeySlot; 4] = [
+    HotkeySlot::new(),
+    HotkeySlot::new(),
+    HotkeySlot::new(),
+    HotkeySlot::new(),
+];
+
+/// Update a hotkey slot for the given mode.
+pub(crate) fn set_hotkey(mode: RecordingMode, modifier: u64, regular_key: u32) {
+    let slot = &HOTKEY_SLOTS[mode as usize];
+    slot.modifier_mask.store(modifier, Ordering::SeqCst);
+    slot.regular_key.store(regular_key, Ordering::SeqCst);
+}
+
+/// Disable a specific hotkey slot (set mask to 0).
+pub(crate) fn pause_hotkey(mode: RecordingMode) {
+    let slot = &HOTKEY_SLOTS[mode as usize];
+    slot.modifier_mask.store(0, Ordering::SeqCst);
+    slot.regular_key.store(0, Ordering::SeqCst);
+}
+
+/// Disable all hotkey slots.
+#[allow(dead_code)]
+pub(crate) fn pause_all_hotkeys() {
+    for slot in &HOTKEY_SLOTS {
+        slot.modifier_mask.store(0, Ordering::SeqCst);
+        slot.regular_key.store(0, Ordering::SeqCst);
+    }
+}
+
+// --- Legacy shim functions for existing callers (will be refactored in later phases) ---
+
+/// Legacy: set dictation hotkey target.
 pub(crate) fn set_hotkey_target(modifier: u64, regular_key: u32) {
-    MODIFIER_MASK.store(modifier, Ordering::SeqCst);
-    REGULAR_KEY.store(regular_key, Ordering::SeqCst);
+    set_hotkey(RecordingMode::Dictation, modifier, regular_key);
 }
 
-/// Temporarily pause hotkey detection (set mask to 0 so nothing matches).
-pub(crate) fn pause_hotkey() {
-    MODIFIER_MASK.store(0, Ordering::SeqCst);
-    REGULAR_KEY.store(0, Ordering::SeqCst);
-}
-
-/// The active translate modifier mask. Updated at runtime via settings.
-static TRANSLATE_MODIFIER_MASK: AtomicU64 = AtomicU64::new(0);
-/// The translate regular key CGKeyCode (always a combo — never 0 in practice).
-static TRANSLATE_REGULAR_KEY: AtomicU32 = AtomicU32::new(0);
-
-/// Update the translate hotkey target at runtime.
+/// Legacy: set translate hotkey target.
 pub(crate) fn set_translate_target(modifier: u64, regular_key: u32) {
-    TRANSLATE_MODIFIER_MASK.store(modifier, Ordering::SeqCst);
-    TRANSLATE_REGULAR_KEY.store(regular_key, Ordering::SeqCst);
+    set_hotkey(RecordingMode::Translate, modifier, regular_key);
 }
 
-/// Temporarily pause translate hotkey detection.
+/// Legacy: pause dictation hotkey.
+#[allow(dead_code)]
+pub(crate) fn pause_hotkey_legacy() {
+    pause_hotkey(RecordingMode::Dictation);
+}
+
+/// Legacy: pause translate hotkey.
+#[allow(dead_code)]
 pub(crate) fn pause_translate_hotkey() {
-    TRANSLATE_MODIFIER_MASK.store(0, Ordering::SeqCst);
-    TRANSLATE_REGULAR_KEY.store(0, Ordering::SeqCst);
+    pause_hotkey(RecordingMode::Translate);
 }
 
 // CGEvent type constants
@@ -101,12 +137,41 @@ extern "C" {
     static kCFRunLoopDefaultMode: CFStringRef;
 }
 
-// Edge detection state for modifier-only mode
+// Edge detection state for modifier-only mode (Dictation slot)
 static KEY_WAS_DOWN: AtomicBool = AtomicBool::new(false);
 
-// State for combo mode
-static MODIFIER_HELD: AtomicBool = AtomicBool::new(false);
+// State for combo mode (per-slot edge detection)
+// For simplicity, we track a single combo state — only one combo can be active at a time.
+static _MODIFIER_HELD_SLOT: AtomicU32 = AtomicU32::new(u32::MAX); // which slot's modifier is held (MAX = none)
 static COMBO_ACTIVE: AtomicBool = AtomicBool::new(false);
+static COMBO_ACTIVE_SLOT: AtomicU32 = AtomicU32::new(u32::MAX);
+
+/// Mode order for matching: combo-only modes first (more specific), modifier-only last.
+/// VoiceCommand(2), ClipboardRewrite(3), Translate(1), Dictation(0)
+const MATCH_ORDER: [usize; 4] = [2, 3, 1, 0];
+
+/// Find which slot matches the given flags + keycode for a key-down event.
+/// Returns (slot_index, RecordingMode) if found.
+fn find_combo_match(keycode: u32, flags: u64) -> Option<(usize, RecordingMode)> {
+    let modes = [
+        RecordingMode::Dictation,
+        RecordingMode::Translate,
+        RecordingMode::VoiceCommand,
+        RecordingMode::ClipboardRewrite,
+    ];
+    for &idx in &MATCH_ORDER {
+        let slot = &HOTKEY_SLOTS[idx];
+        let mask = slot.modifier_mask.load(Ordering::SeqCst);
+        let rk = slot.regular_key.load(Ordering::SeqCst);
+        if mask == 0 {
+            continue; // disabled slot
+        }
+        if rk != 0 && keycode == rk && (flags & mask) == mask {
+            return Some((idx, modes[idx]));
+        }
+    }
+    None
+}
 
 unsafe extern "C" fn event_tap_callback(
     _proxy: CGEventTapProxy,
@@ -115,7 +180,6 @@ unsafe extern "C" fn event_tap_callback(
     user_info: *mut c_void,
 ) -> CGEventRef {
     let sender = &*(user_info as *const mpsc::Sender<HotkeyEvent>);
-    let regular_key = REGULAR_KEY.load(Ordering::SeqCst);
 
     // ESC key detection — cancel recording regardless of hotkey mode
     if event_type == K_CG_EVENT_KEY_DOWN {
@@ -126,69 +190,82 @@ unsafe extern "C" fn event_tap_callback(
         }
     }
 
-    // Translate hotkey detection — always a combo (modifier+key)
-    let tr_modifier = TRANSLATE_MODIFIER_MASK.load(Ordering::SeqCst);
-    let tr_key = TRANSLATE_REGULAR_KEY.load(Ordering::SeqCst);
-    if tr_key != 0 && event_type == K_CG_EVENT_KEY_DOWN {
+    // --- Combo hotkey detection (key-down) ---
+    if event_type == K_CG_EVENT_KEY_DOWN {
         let keycode = CGEventGetIntegerValueField(event, K_CG_KEYBOARD_EVENT_KEYCODE) as u32;
-        if keycode == tr_key {
-            let flags = CGEventGetFlags(event);
-            if (flags & tr_modifier) == tr_modifier {
-                let _ = sender.send(HotkeyEvent::TranslatePressed);
-                return std::ptr::null_mut(); // consume the key event
+        let flags = CGEventGetFlags(event);
+
+        // Don't match if a combo is already active
+        if !COMBO_ACTIVE.load(Ordering::SeqCst) {
+            if let Some((idx, mode)) = find_combo_match(keycode, flags) {
+                COMBO_ACTIVE.store(true, Ordering::SeqCst);
+                COMBO_ACTIVE_SLOT.store(idx as u32, Ordering::SeqCst);
+                let _ = sender.send(HotkeyEvent::Pressed(mode));
+                return std::ptr::null_mut(); // consume event
             }
         }
     }
 
-    if regular_key == 0 {
-        // Modifier-only mode — original edge detection logic (unchanged)
-        if event_type == K_CG_EVENT_FLAGS_CHANGED {
+    // --- Combo hotkey release (key-up for regular key) ---
+    if event_type == K_CG_EVENT_KEY_UP && COMBO_ACTIVE.load(Ordering::SeqCst) {
+        let keycode = CGEventGetIntegerValueField(event, K_CG_KEYBOARD_EVENT_KEYCODE) as u32;
+        let active_idx = COMBO_ACTIVE_SLOT.load(Ordering::SeqCst) as usize;
+        if active_idx < 4 {
+            let slot = &HOTKEY_SLOTS[active_idx];
+            let rk = slot.regular_key.load(Ordering::SeqCst);
+            if keycode == rk {
+                COMBO_ACTIVE.store(false, Ordering::SeqCst);
+                let modes = [
+                    RecordingMode::Dictation,
+                    RecordingMode::Translate,
+                    RecordingMode::VoiceCommand,
+                    RecordingMode::ClipboardRewrite,
+                ];
+                let _ = sender.send(HotkeyEvent::Released(modes[active_idx]));
+                return std::ptr::null_mut(); // consume event
+            }
+        }
+    }
+
+    // --- Modifier released while combo active → release ---
+    if event_type == K_CG_EVENT_FLAGS_CHANGED && COMBO_ACTIVE.load(Ordering::SeqCst) {
+        let active_idx = COMBO_ACTIVE_SLOT.load(Ordering::SeqCst) as usize;
+        if active_idx < 4 {
+            let slot = &HOTKEY_SLOTS[active_idx];
+            let mask = slot.modifier_mask.load(Ordering::SeqCst);
             let flags = CGEventGetFlags(event);
-            let mask = MODIFIER_MASK.load(Ordering::SeqCst);
+            if (flags & mask) == 0 {
+                COMBO_ACTIVE.store(false, Ordering::SeqCst);
+                let modes = [
+                    RecordingMode::Dictation,
+                    RecordingMode::Translate,
+                    RecordingMode::VoiceCommand,
+                    RecordingMode::ClipboardRewrite,
+                ];
+                let _ = sender.send(HotkeyEvent::Released(modes[active_idx]));
+            }
+        }
+        // Fall through to check modifier-only mode
+    }
+
+    // --- Modifier-only mode (Dictation slot only, when regular_key == 0) ---
+    let dict_slot = &HOTKEY_SLOTS[0]; // Dictation
+    let dict_rk = dict_slot.regular_key.load(Ordering::SeqCst);
+    if dict_rk == 0
+        && !COMBO_ACTIVE.load(Ordering::SeqCst)
+        && event_type == K_CG_EVENT_FLAGS_CHANGED
+    {
+        let flags = CGEventGetFlags(event);
+        let mask = dict_slot.modifier_mask.load(Ordering::SeqCst);
+        if mask != 0 {
             let key_now = (flags & mask) != 0;
             let was_down = KEY_WAS_DOWN.swap(key_now, Ordering::SeqCst);
             if key_now && !was_down {
-                let _ = sender.send(HotkeyEvent::Pressed);
+                let _ = sender.send(HotkeyEvent::Pressed(RecordingMode::Dictation));
             } else if !key_now && was_down {
-                let _ = sender.send(HotkeyEvent::Released);
+                let _ = sender.send(HotkeyEvent::Released(RecordingMode::Dictation));
             }
         }
-        return event;
-    }
-
-    // Combo mode: modifier + regular key
-    match event_type {
-        K_CG_EVENT_FLAGS_CHANGED => {
-            let modifier = MODIFIER_MASK.load(Ordering::SeqCst);
-            let flags = CGEventGetFlags(event);
-            let mod_held = (flags & modifier) != 0;
-            MODIFIER_HELD.store(mod_held, Ordering::SeqCst);
-            // Modifier released while combo was active → emit Released
-            if !mod_held && COMBO_ACTIVE.swap(false, Ordering::SeqCst) {
-                let _ = sender.send(HotkeyEvent::Released);
-            }
-        }
-        K_CG_EVENT_KEY_DOWN => {
-            let keycode =
-                CGEventGetIntegerValueField(event, K_CG_KEYBOARD_EVENT_KEYCODE) as u32;
-            if keycode == regular_key
-                && MODIFIER_HELD.load(Ordering::SeqCst)
-                && !COMBO_ACTIVE.load(Ordering::SeqCst)
-            {
-                COMBO_ACTIVE.store(true, Ordering::SeqCst);
-                let _ = sender.send(HotkeyEvent::Pressed);
-                return std::ptr::null_mut(); // consume event
-            }
-        }
-        K_CG_EVENT_KEY_UP => {
-            let keycode =
-                CGEventGetIntegerValueField(event, K_CG_KEYBOARD_EVENT_KEYCODE) as u32;
-            if keycode == regular_key && COMBO_ACTIVE.swap(false, Ordering::SeqCst) {
-                let _ = sender.send(HotkeyEvent::Released);
-                return std::ptr::null_mut(); // consume event
-            }
-        }
-        _ => {}
     }
 
     event

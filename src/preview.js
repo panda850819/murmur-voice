@@ -378,6 +378,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       setHeader(t("state.done"), false);
       if (mode === TRANSCRIPTION_MODES.TRANSLATED) {
         setHeader(t("state.translated"), false);
+      } else if (mode === TRANSCRIPTION_MODES.VOICE_COMMAND) {
+        setHeader(t("preview.mode.voice_command"), false);
+      } else if (mode === TRANSCRIPTION_MODES.CLIPBOARD_REWRITE) {
+        setHeader(t("preview.mode.clipboard_rewrite"), false);
       }
       setText(text, null);
       setCharCount(text);
@@ -385,7 +389,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       originalText = text;
       copyBtn().classList.remove("hidden");
       closeBtn().classList.remove("hidden");
-      if (mode === TRANSCRIPTION_MODES.PASTED || mode === TRANSCRIPTION_MODES.CLIPBOARD) {
+      if (mode === TRANSCRIPTION_MODES.PASTED || mode === TRANSCRIPTION_MODES.CLIPBOARD
+          || mode === TRANSCRIPTION_MODES.DICTATED) {
         translateBtn().classList.remove("hidden");
         translateBtn().disabled = false;
         translateBtn().classList.remove("translating");

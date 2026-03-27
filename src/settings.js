@@ -52,7 +52,10 @@ let textReplacements = []; // { find, replace, enabled }
 let replaceUndoTimer = null;
 let replaceUndoEntry = null; // { rule, index }
 let currentTranslateKey = "AltLeft+KeyT";
+let currentVoiceCommandKey = "";
+let currentClipboardRewriteKey = "";
 let isRecordingTranslate = false;
+let activeComboRecorder = null; // { btnId, setter, stateKey }
 let capturedTranslateModifiers = new Set();
 
 const el = (id) => document.getElementById(id);
@@ -117,7 +120,62 @@ function stopTranslateRecording() {
   btn.textContent = displayNameFor(currentTranslateKey);
 }
 
+
+function startComboRecording(btnId, setter) {
+  if (isRecording) stopRecording();
+  if (isRecordingTranslate) stopTranslateRecording();
+  if (activeComboRecorder) stopComboRecording();
+  activeComboRecorder = { btnId, setter, modifiers: new Set() };
+  invoke(COMMANDS.PAUSE_HOTKEY_LISTENER).catch(() => {});
+  invoke(COMMANDS.PAUSE_TRANSLATE_HOTKEY).catch(() => {});
+  const btn = el(btnId);
+  btn.textContent = t("ptt.holdModifier");
+  btn.classList.add("recording");
+}
+
+function stopComboRecording() {
+  if (!activeComboRecorder) return;
+  const { btnId, setter } = activeComboRecorder;
+  invoke(COMMANDS.RESUME_HOTKEY_LISTENER).catch(() => {});
+  invoke(COMMANDS.RESUME_TRANSLATE_HOTKEY).catch(() => {});
+  const btn = el(btnId);
+  btn.classList.remove("recording");
+  btn.textContent = setter() ? displayNameFor(setter()) : t("hotkey.notSet");
+  activeComboRecorder = null;
+}
+
+function handleComboKeyDown(e) {
+  if (!activeComboRecorder) return false;
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.code === "Escape") {
+    stopComboRecording();
+    return true;
+  }
+  if (KEY_MAP[e.code]) {
+    activeComboRecorder.modifiers.add(e.code);
+    const modNames = Array.from(activeComboRecorder.modifiers).map(m => KEY_MAP[m]).join(" + ");
+    el(activeComboRecorder.btnId).textContent = modNames + " + ...";
+  } else if (REGULAR_KEY_MAP[e.code] && activeComboRecorder.modifiers.size > 0) {
+    const combo = Array.from(activeComboRecorder.modifiers).join("+") + "+" + e.code;
+    activeComboRecorder.setter(combo);
+    stopComboRecording();
+  }
+  return true;
+}
+
+function handleComboKeyUp(e) {
+  if (!activeComboRecorder) return;
+  if (activeComboRecorder.modifiers.has(e.code)) {
+    activeComboRecorder.modifiers.delete(e.code);
+    if (activeComboRecorder.modifiers.size === 0) {
+      stopComboRecording();
+    }
+  }
+}
+
 function handleKeyDown(e) {
+  if (handleComboKeyDown(e)) return;
   if (!isRecording && !isRecordingTranslate) return;
   e.preventDefault();
   e.stopPropagation();
@@ -156,6 +214,7 @@ function handleKeyDown(e) {
 }
 
 function handleKeyUp(e) {
+  handleComboKeyUp(e);
   if (isRecording && recordingPhase === "combo") {
     if (e.code === capturedModifier) {
       currentPttKey = capturedModifier;
@@ -404,7 +463,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Load settings
   try {
     const s = await invoke(COMMANDS.GET_SETTINGS);
-    setPttKey(s.ptt_key);
+    setPttKey(s.hotkey_dictation || s.ptt_key);
     el("language").value = s.language;
     el("engine").value = s.engine;
     el("model").value = s.model;
@@ -433,7 +492,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     renderReplaceList();
     updateEngineVisibility();
     updateLlmVisibility();
-    setTranslateKey(s.translate_hotkey || "AltLeft+KeyT");
+    setTranslateKey(s.hotkey_translate || s.translate_hotkey || "AltLeft+KeyT");
+    currentVoiceCommandKey = s.hotkey_voice_command || "";
+    currentClipboardRewriteKey = s.hotkey_clipboard_rewrite || "";
+    el("voice-command-record").textContent = currentVoiceCommandKey ? displayNameFor(currentVoiceCommandKey) : t("hotkey.notSet");
+    el("clipboard-rewrite-record").textContent = currentClipboardRewriteKey ? displayNameFor(currentClipboardRewriteKey) : t("hotkey.notSet");
     el("translate-language").value = s.translate_language || "en";
     // Apply locale
     el("ui-locale").value = s.ui_locale || "en";
@@ -458,6 +521,21 @@ window.addEventListener("DOMContentLoaded", async () => {
       if (isRecording) stopRecording();
       startTranslateRecording();
     }
+  });
+
+
+  el("voice-command-record").addEventListener("click", () => {
+    startComboRecording("voice-command-record", (v) => {
+      if (v !== undefined) currentVoiceCommandKey = v;
+      return currentVoiceCommandKey;
+    });
+  });
+
+  el("clipboard-rewrite-record").addEventListener("click", () => {
+    startComboRecording("clipboard-rewrite-record", (v) => {
+      if (v !== undefined) currentClipboardRewriteKey = v;
+      return currentClipboardRewriteKey;
+    });
   });
 
   // Global keydown/keyup for recording
@@ -552,6 +630,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   el("btn-save").addEventListener("click", async () => {
     const newSettings = {
       ptt_key: currentPttKey,
+      hotkey_dictation: currentPttKey,
       language: el("language").value,
       engine: el("engine").value,
       model: el("model").value,
@@ -571,6 +650,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       custom_llm_model: el("custom-llm-model").value,
       ui_locale: el("ui-locale").value,
       translate_hotkey: currentTranslateKey,
+      hotkey_translate: currentTranslateKey,
+      hotkey_voice_command: currentVoiceCommandKey,
+      hotkey_clipboard_rewrite: currentClipboardRewriteKey,
       translate_language: el("translate-language").value,
       dictionary_packs: getEnabledPacks(),
       text_replacements: collectReplacements(),

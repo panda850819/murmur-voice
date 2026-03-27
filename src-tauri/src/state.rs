@@ -1,6 +1,36 @@
 use std::sync::Mutex;
 use thiserror::Error;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) enum RecordingMode {
+    #[default]
+    Dictation,
+    Translate,
+    VoiceCommand,
+    ClipboardRewrite,
+}
+
+impl RecordingMode {
+    /// Returns the string identifier used in frontend events.
+    pub(crate) fn event_mode_str(&self) -> &'static str {
+        match self {
+            RecordingMode::Dictation => "dictated",
+            RecordingMode::Translate => "translated",
+            RecordingMode::VoiceCommand => "voice_command",
+            RecordingMode::ClipboardRewrite => "clipboard_rewrite",
+        }
+    }
+
+    /// Returns the context_type label for LLM execute_command.
+    pub(crate) fn context_type(&self) -> &'static str {
+        match self {
+            RecordingMode::VoiceCommand => "Selected text",
+            RecordingMode::ClipboardRewrite => "Clipboard content",
+            _ => "",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub(crate) enum RecordingState {
     Idle,
@@ -189,5 +219,43 @@ mod tests {
         assert_eq!(RecordingState::Stopping.to_string(), "stopping");
         assert_eq!(RecordingState::Transcribing.to_string(), "transcribing");
         assert_eq!(RecordingState::Processing.to_string(), "processing");
+    }
+
+    // --- RecordingMode tests ---
+
+    #[test]
+    fn test_recording_mode_default() {
+        assert_eq!(RecordingMode::default(), RecordingMode::Dictation);
+    }
+
+    #[test]
+    fn test_recording_mode_serialization_roundtrip() {
+        let modes = [
+            RecordingMode::Dictation,
+            RecordingMode::Translate,
+            RecordingMode::VoiceCommand,
+            RecordingMode::ClipboardRewrite,
+        ];
+        for mode in &modes {
+            let json = serde_json::to_string(mode).unwrap();
+            let deserialized: RecordingMode = serde_json::from_str(&json).unwrap();
+            assert_eq!(*mode, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_recording_mode_event_mode_str() {
+        assert_eq!(RecordingMode::Dictation.event_mode_str(), "dictated");
+        assert_eq!(RecordingMode::Translate.event_mode_str(), "translated");
+        assert_eq!(RecordingMode::VoiceCommand.event_mode_str(), "voice_command");
+        assert_eq!(RecordingMode::ClipboardRewrite.event_mode_str(), "clipboard_rewrite");
+    }
+
+    #[test]
+    fn test_recording_mode_context_type() {
+        assert_eq!(RecordingMode::VoiceCommand.context_type(), "Selected text");
+        assert_eq!(RecordingMode::ClipboardRewrite.context_type(), "Clipboard content");
+        assert_eq!(RecordingMode::Dictation.context_type(), "");
+        assert_eq!(RecordingMode::Translate.context_type(), "");
     }
 }

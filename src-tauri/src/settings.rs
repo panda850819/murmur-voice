@@ -7,6 +7,14 @@ fn default_true() -> bool {
     true
 }
 
+fn default_hotkey_dictation() -> String {
+    "left_option".to_string()
+}
+
+fn default_hotkey_translate() -> String {
+    "AltLeft+KeyT".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextReplacement {
     pub find: String,
@@ -18,6 +26,9 @@ pub struct TextReplacement {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct Settings {
+    // Legacy field — kept for backward compatibility with old settings files.
+    // New code should use hotkey_dictation instead.
+    #[serde(skip_serializing)]
     pub ptt_key: String,
     pub language: String,
     pub engine: String,
@@ -38,11 +49,23 @@ pub(crate) struct Settings {
     pub custom_llm_model: String,
     pub app_aware_style: bool,
     pub ui_locale: String,
+    // Legacy field — kept for backward compatibility. Use hotkey_translate instead.
+    #[serde(skip_serializing)]
     pub translate_hotkey: String,
     pub translate_language: String,
     pub dictionary_packs: Vec<String>,
     #[serde(default)]
     pub text_replacements: Vec<TextReplacement>,
+
+    // --- Multi-mode hotkey fields (v0.5.0+) ---
+    #[serde(default = "default_hotkey_dictation")]
+    pub hotkey_dictation: String,
+    #[serde(default = "default_hotkey_translate")]
+    pub hotkey_translate: String,
+    #[serde(default)]
+    pub hotkey_voice_command: String,
+    #[serde(default)]
+    pub hotkey_clipboard_rewrite: String,
 }
 
 /// Target for PTT key matching — supports single modifier or modifier+key combos.
@@ -55,7 +78,7 @@ pub(crate) struct PttKeyTarget {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            ptt_key: "left_option".to_string(),
+            ptt_key: String::new(),
             language: "auto".to_string(),
             engine: "local".to_string(),
             model: "large-v3-turbo".to_string(),
@@ -75,15 +98,41 @@ impl Default for Settings {
             custom_llm_model: String::new(),
             app_aware_style: true,
             ui_locale: "en".to_string(),
-            translate_hotkey: "AltLeft+KeyT".to_string(),
+            translate_hotkey: String::new(),
             translate_language: "en".to_string(),
             dictionary_packs: Vec::new(),
             text_replacements: Vec::new(),
+            hotkey_dictation: "left_option".to_string(),
+            hotkey_translate: "AltLeft+KeyT".to_string(),
+            hotkey_voice_command: String::new(),
+            hotkey_clipboard_rewrite: String::new(),
+        }
+    }
+}
+
+impl Settings {
+    /// Migrate legacy field names to new hotkey fields.
+    /// Called after deserialization — if legacy fields have values but new fields
+    /// have defaults, copy the legacy values over.
+    pub(crate) fn migrate_legacy_hotkeys(&mut self) {
+        // ptt_key → hotkey_dictation
+        if !self.ptt_key.is_empty() && self.hotkey_dictation == default_hotkey_dictation() {
+            self.hotkey_dictation = self.ptt_key.clone();
+        }
+        // translate_hotkey → hotkey_translate
+        if !self.translate_hotkey.is_empty() && self.hotkey_translate == default_hotkey_translate() {
+            self.hotkey_translate = self.translate_hotkey.clone();
         }
     }
 }
 
 pub(crate) fn parse_hotkey(key: &str) -> PttKeyTarget {
+    if key.is_empty() {
+        return PttKeyTarget {
+            modifier_mask: 0,
+            regular_key: 0,
+        };
+    }
     let parts: Vec<&str> = key.split('+').collect();
     if parts.len() >= 2 {
         let last = *parts.last().unwrap();
@@ -130,14 +179,23 @@ fn combine_modifier_masks(modifiers: &[&str]) -> u64 {
 }
 
 impl Settings {
-    /// Returns a PttKeyTarget for the configured PTT key.
-    /// Supports single modifier ("AltLeft") and combo ("AltLeft+KeyZ") formats.
+    /// Returns a PttKeyTarget for the configured dictation hotkey.
     pub fn ptt_key_target(&self) -> PttKeyTarget {
-        parse_hotkey(&self.ptt_key)
+        parse_hotkey(&self.hotkey_dictation)
     }
 
     pub fn translate_key_target(&self) -> PttKeyTarget {
-        parse_hotkey(&self.translate_hotkey)
+        parse_hotkey(&self.hotkey_translate)
+    }
+
+    /// Returns a PttKeyTarget for the voice command hotkey.
+    pub fn voice_command_key_target(&self) -> PttKeyTarget {
+        parse_hotkey(&self.hotkey_voice_command)
+    }
+
+    /// Returns a PttKeyTarget for the clipboard rewrite hotkey.
+    pub fn clipboard_rewrite_key_target(&self) -> PttKeyTarget {
+        parse_hotkey(&self.hotkey_clipboard_rewrite)
     }
 
     /// Apply text replacement rules to the given text.
@@ -347,7 +405,7 @@ fn settings_path(base: &Path) -> PathBuf {
 
 pub(crate) fn load_settings(base: &Path) -> Settings {
     let path = settings_path(base);
-    match std::fs::read_to_string(&path) {
+    let mut settings = match std::fs::read_to_string(&path) {
         Ok(content) => match serde_json::from_str(&content) {
             Ok(settings) => settings,
             Err(e) => {
@@ -356,7 +414,9 @@ pub(crate) fn load_settings(base: &Path) -> Settings {
             }
         },
         Err(_) => Settings::default(),
-    }
+    };
+    settings.migrate_legacy_hotkeys();
+    settings
 }
 
 pub(crate) fn save_settings(settings: &Settings, base: &Path) -> Result<(), String> {
@@ -392,11 +452,14 @@ mod tests {
             "llm_model": "llama-3.3-70b-versatile"
         }"#;
 
-        let s: Settings = serde_json::from_str(json).unwrap();
+        let mut s: Settings = serde_json::from_str(json).unwrap();
+        s.migrate_legacy_hotkeys();
         assert_eq!(s.llm_provider, "groq");
         assert_eq!(s.ollama_url, "http://localhost:11434");
         assert_eq!(s.ollama_model, "llama3.2");
         assert!(s.custom_llm_url.is_empty());
+        // Legacy ptt_key should migrate to hotkey_dictation
+        assert_eq!(s.hotkey_dictation, "AltLeft");
     }
 
     #[test]
@@ -442,7 +505,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     fn test_ptt_key_target_single_modifier() {
         let s = Settings {
-            ptt_key: "AltLeft".to_string(),
+            hotkey_dictation: "AltLeft".to_string(),
             ..Settings::default()
         };
         let t = s.ptt_key_target();
@@ -454,7 +517,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     fn test_ptt_key_target_legacy_modifier() {
         let s = Settings {
-            ptt_key: "left_option".to_string(),
+            hotkey_dictation: "left_option".to_string(),
             ..Settings::default()
         };
         let t = s.ptt_key_target();
@@ -466,7 +529,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     fn test_ptt_key_target_combo() {
         let s = Settings {
-            ptt_key: "AltLeft+KeyZ".to_string(),
+            hotkey_dictation: "AltLeft+KeyZ".to_string(),
             ..Settings::default()
         };
         let t = s.ptt_key_target();
@@ -478,7 +541,7 @@ mod tests {
     #[cfg(target_os = "windows")]
     fn test_ptt_key_target_single_modifier_windows() {
         let s = Settings {
-            ptt_key: "AltLeft".to_string(),
+            hotkey_dictation: "AltLeft".to_string(),
             ..Settings::default()
         };
         let t = s.ptt_key_target();
@@ -490,7 +553,7 @@ mod tests {
     #[cfg(target_os = "windows")]
     fn test_ptt_key_target_combo_windows() {
         let s = Settings {
-            ptt_key: "AltLeft+KeyZ".to_string(),
+            hotkey_dictation: "AltLeft+KeyZ".to_string(),
             ..Settings::default()
         };
         let t = s.ptt_key_target();
@@ -501,7 +564,7 @@ mod tests {
     #[test]
     fn test_ptt_key_target_unknown_regular_key_fallback() {
         let s = Settings {
-            ptt_key: "AltLeft+KeyUnknown".to_string(),
+            hotkey_dictation: "AltLeft+KeyUnknown".to_string(),
             ..Settings::default()
         };
         let t = s.ptt_key_target();
@@ -570,7 +633,7 @@ mod tests {
             "auto_start": false
         }"#;
         let s: Settings = serde_json::from_str(json).unwrap();
-        assert_eq!(s.translate_hotkey, "AltLeft+KeyT");
+        assert_eq!(s.hotkey_translate, "AltLeft+KeyT");
         assert_eq!(s.translate_language, "en");
     }
 
@@ -585,6 +648,13 @@ mod tests {
     fn test_parse_hotkey_single() {
         let t = parse_hotkey("AltLeft");
         assert_ne!(t.modifier_mask, 0);
+        assert_eq!(t.regular_key, 0);
+    }
+
+    #[test]
+    fn test_parse_hotkey_empty() {
+        let t = parse_hotkey("");
+        assert_eq!(t.modifier_mask, 0);
         assert_eq!(t.regular_key, 0);
     }
 
@@ -712,5 +782,57 @@ mod tests {
         assert!(deserialized.text_replacements[0].enabled);
         assert_eq!(deserialized.text_replacements[1].find, "typo");
         assert!(!deserialized.text_replacements[1].enabled);
+    }
+
+    // --- Migration tests ---
+
+    #[test]
+    fn test_migrate_legacy_ptt_key() {
+        let json = r#"{
+            "ptt_key": "right_option",
+            "language": "auto",
+            "engine": "local"
+        }"#;
+        let mut s: Settings = serde_json::from_str(json).unwrap();
+        s.migrate_legacy_hotkeys();
+        assert_eq!(s.hotkey_dictation, "right_option");
+    }
+
+    #[test]
+    fn test_migrate_legacy_translate_hotkey() {
+        let json = r#"{
+            "translate_hotkey": "MetaLeft+KeyT",
+            "language": "auto"
+        }"#;
+        let mut s: Settings = serde_json::from_str(json).unwrap();
+        s.migrate_legacy_hotkeys();
+        assert_eq!(s.hotkey_translate, "MetaLeft+KeyT");
+    }
+
+    #[test]
+    fn test_no_migration_when_new_fields_present() {
+        let json = r#"{
+            "ptt_key": "old_value",
+            "hotkey_dictation": "new_value",
+            "translate_hotkey": "old_translate",
+            "hotkey_translate": "new_translate"
+        }"#;
+        let mut s: Settings = serde_json::from_str(json).unwrap();
+        s.migrate_legacy_hotkeys();
+        // New fields should NOT be overwritten by legacy fields
+        assert_eq!(s.hotkey_dictation, "new_value");
+        assert_eq!(s.hotkey_translate, "new_translate");
+    }
+
+    #[test]
+    fn test_voice_command_and_clipboard_rewrite_defaults() {
+        let s = Settings::default();
+        assert!(s.hotkey_voice_command.is_empty());
+        assert!(s.hotkey_clipboard_rewrite.is_empty());
+        // Empty hotkey should parse to disabled (mask = 0)
+        let vc = s.voice_command_key_target();
+        assert_eq!(vc.modifier_mask, 0);
+        let cr = s.clipboard_rewrite_key_target();
+        assert_eq!(cr.modifier_mask, 0);
     }
 }

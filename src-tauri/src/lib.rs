@@ -62,6 +62,10 @@ pub(crate) struct MurmurState {
     downloading: AtomicBool,
     /// Guard to prevent concurrent translation operations.
     translating: AtomicBool,
+    /// Active recording mode for the current recording cycle.
+    active_mode: Mutex<state::RecordingMode>,
+    /// Captured context (selected text / clipboard) for VoiceCommand/ClipboardRewrite.
+    captured_context: Mutex<Option<String>>,
 }
 
 /// Signal that engine initialization is complete (success or failure).
@@ -188,6 +192,19 @@ fn cancel_active_recording(state: &MurmurState) {
 /// a modifier conflict (rather than an intentional recording).
 const MODIFIER_CONFLICT_WINDOW: std::time::Duration = std::time::Duration::from_millis(500);
 
+/// Emit recording mode info to the frontend for display in the main bar.
+fn emit_mode_info(app: &tauri::AppHandle, mode: state::RecordingMode, llm_enabled: bool) {
+    let mode_str = match mode {
+        state::RecordingMode::Dictation => {
+            if llm_enabled { "dictation_llm" } else { "dictation" }
+        }
+        state::RecordingMode::VoiceCommand => "voice_command",
+        state::RecordingMode::ClipboardRewrite => "clipboard_rewrite",
+        state::RecordingMode::Translate => "translate",
+    };
+    let _ = app.emit(events::RECORDING_MODE_INFO, mode_str);
+}
+
 fn do_translate(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<MurmurState>();
 
@@ -236,8 +253,56 @@ fn do_translate(app: &tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
+fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Result<(), String> {
     let state = app.state::<MurmurState>();
+
+    // Store the active mode
+    if let Ok(mut m) = state.active_mode.lock() {
+        *m = mode;
+    }
+
+    // For VoiceCommand/ClipboardRewrite, check prerequisites
+    match mode {
+        state::RecordingMode::VoiceCommand => {
+            // Check LLM is enabled
+            let llm_enabled = state.settings.lock().map(|s| s.llm_enabled).unwrap_or(false);
+            if !llm_enabled {
+                return Err("Enable AI Processing in Settings to use Voice Command mode".to_string());
+            }
+            // Copy selection to get context
+            clipboard::copy_selection().map_err(|e| format!("Failed to copy selection: {e}"))?;
+            let text = clipboard::read_text()
+                .map_err(|e| format!("Failed to read clipboard: {e}"))?;
+            if text.trim().is_empty() {
+                return Err("No text selected".to_string());
+            }
+            if let Ok(mut ctx) = state.captured_context.lock() {
+                *ctx = Some(text);
+            }
+        }
+        state::RecordingMode::ClipboardRewrite => {
+            // Check LLM is enabled
+            let llm_enabled = state.settings.lock().map(|s| s.llm_enabled).unwrap_or(false);
+            if !llm_enabled {
+                return Err("Enable AI Processing in Settings to use Clipboard Rewrite mode".to_string());
+            }
+            // Read clipboard content
+            let text = clipboard::read_text()
+                .map_err(|e| format!("Failed to read clipboard: {e}"))?;
+            if text.trim().is_empty() {
+                return Err("Clipboard is empty".to_string());
+            }
+            if let Ok(mut ctx) = state.captured_context.lock() {
+                *ctx = Some(text);
+            }
+        }
+        _ => {
+            // Clear any stale context
+            if let Ok(mut ctx) = state.captured_context.lock() {
+                *ctx = None;
+            }
+        }
+    }
 
     // If local engine and model not downloaded, trigger download instead of recording
     let is_local = state.settings.lock().map(|s| s.engine != "groq").unwrap_or(true);
@@ -295,6 +360,10 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
     state.main_visible.store(true, Ordering::SeqCst);
     show_preview_window(app);
 
+    // Emit mode info for main bar display
+    let llm_enabled = state.settings.lock().map(|s| s.llm_enabled).unwrap_or(false);
+    emit_mode_info(app, mode, llm_enabled);
+
     state
         .app_state
         .transition(state::RecordingState::Starting)
@@ -323,12 +392,12 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
     let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_RECORDING);
 
     // Auto-stop after 5 minutes in toggle mode
-    let mode = state
+    let rec_mode = state
         .settings
         .lock()
         .map(|s| s.recording_mode.clone())
         .unwrap_or_default();
-    if mode == "toggle" {
+    if rec_mode == "toggle" {
         let app_timeout = app.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_secs(300));
@@ -339,13 +408,14 @@ fn do_start_recording(app: &tauri::AppHandle) -> Result<(), String> {
         });
     }
 
-    // Start live transcription thread (local engine only — Groq would be too expensive).
-    // Requires GPU acceleration (Metal on macOS, CUDA on Windows) to be fast enough.
-    let enable_live_preview = state
-        .settings
-        .lock()
-        .map(|s| s.engine != "groq")
-        .unwrap_or(true);
+    // Start live transcription thread — only for Dictation mode with local engine.
+    // VoiceCommand/ClipboardRewrite record voice commands, live preview not useful.
+    let enable_live_preview = mode == state::RecordingMode::Dictation
+        && state
+            .settings
+            .lock()
+            .map(|s| s.engine != "groq")
+            .unwrap_or(true);
 
     state.live_stop.store(false, Ordering::SeqCst);
     if enable_live_preview {
@@ -464,6 +534,11 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         .transition(state::RecordingState::Transcribing);
     let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_TRANSCRIBING);
 
+    // Read active mode
+    let active_mode = state.active_mode.lock()
+        .map(|m| *m)
+        .unwrap_or(state::RecordingMode::Dictation);
+
     // Emit foreground app info for the frontend (preview window + main bar badge)
     {
         let app_aware = state
@@ -565,58 +640,119 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
 
     log::debug!("[whisper raw] {}", raw_text);
 
-    // Read settings once: build enhancer + apply text replacements
-    let (enhancer, app_aware_style, raw_text) = {
-        let s = state
-            .settings
-            .lock()
-            .map_err(|e| format!("settings mutex poisoned: {e}"))?;
-        (llm::create_enhancer(&s), s.app_aware_style, s.apply_replacements(&raw_text))
-    };
-
-    let text = if let Some(enhancer) = enhancer {
-        if raw_text.is_empty() {
-            raw_text
-        } else {
-            let _ = state
-                .app_state
-                .transition(state::RecordingState::Processing);
-            let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_PROCESSING);
-
-            let _ = app.emit(
-                events::ENHANCER_INFO,
-                serde_json::json!({
-                    "name": enhancer.name(),
-                    "local": enhancer.is_local(),
-                }),
-            );
-
-            let style = if app_aware_style {
-                frontapp::foreground_app_bundle_id()
-                    .as_deref()
-                    .map(frontapp::style_for_app)
-                    .unwrap_or("default")
-            } else {
-                "default"
+    // Branch based on active mode
+    let text = match active_mode {
+        state::RecordingMode::Dictation => {
+            // Existing dictation flow: text_replacement → optional LLM enhance → paste
+            let (enhancer, app_aware_style, raw_text) = {
+                let s = state
+                    .settings
+                    .lock()
+                    .map_err(|e| format!("settings mutex poisoned: {e}"))?;
+                (llm::create_enhancer(&s), s.app_aware_style, s.apply_replacements(&raw_text))
             };
 
-            match enhancer.enhance(&raw_text, style) {
-                Ok(processed) => {
-                    log::debug!("[llm output] {}", processed);
-                    processed
-                }
-                Err(e) => {
-                    log::error!("LLM post-processing failed: {}", e);
-                    let _ = app.emit(
-                        events::RECORDING_ERROR,
-                        format!("LLM processing failed, using raw text: {e}"),
-                    );
+            if let Some(enhancer) = enhancer {
+                if raw_text.is_empty() {
                     raw_text
+                } else {
+                    let _ = state
+                        .app_state
+                        .transition(state::RecordingState::Processing);
+                    let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_PROCESSING);
+
+                    let _ = app.emit(
+                        events::ENHANCER_INFO,
+                        serde_json::json!({
+                            "name": enhancer.name(),
+                            "local": enhancer.is_local(),
+                        }),
+                    );
+
+                    let style = if app_aware_style {
+                        frontapp::foreground_app_bundle_id()
+                            .as_deref()
+                            .map(frontapp::style_for_app)
+                            .unwrap_or("default")
+                    } else {
+                        "default"
+                    };
+
+                    match enhancer.enhance(&raw_text, style) {
+                        Ok(processed) => {
+                            log::debug!("[llm output] {}", processed);
+                            processed
+                        }
+                        Err(e) => {
+                            log::error!("LLM post-processing failed: {}", e);
+                            let _ = app.emit(
+                                events::RECORDING_ERROR,
+                                format!("LLM processing failed, using raw text: {e}"),
+                            );
+                            raw_text
+                        }
+                    }
+                }
+            } else {
+                raw_text
+            }
+        }
+        state::RecordingMode::VoiceCommand | state::RecordingMode::ClipboardRewrite => {
+            // Voice command flow: skip text_replacement, require LLM
+            let context = state.captured_context.lock()
+                .ok()
+                .and_then(|mut ctx| ctx.take())
+                .unwrap_or_default();
+
+            if raw_text.trim().is_empty() {
+                reset_to_idle(&state, app);
+                return Ok(String::new());
+            }
+
+            let _ = state.app_state.transition(state::RecordingState::Processing);
+            let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_PROCESSING);
+
+            let enhancer = {
+                let s = state.settings.lock()
+                    .map_err(|e| format!("settings mutex poisoned: {e}"))?;
+                llm::create_enhancer(&s)
+            };
+
+            match enhancer {
+                Some(enhancer) => {
+                    let _ = app.emit(
+                        events::ENHANCER_INFO,
+                        serde_json::json!({
+                            "name": enhancer.name(),
+                            "local": enhancer.is_local(),
+                        }),
+                    );
+
+                    let context_type = active_mode.context_type();
+                    match enhancer.execute_command(&raw_text, &context, context_type) {
+                        Ok(result) => {
+                            log::debug!("[llm command output] {}", result);
+                            result
+                        }
+                        Err(e) => {
+                            log::error!("LLM execute_command failed: {}", e);
+                            let _ = app.emit(events::RECORDING_ERROR, format!("LLM processing failed: {e}"));
+                            return Err(e.to_string());
+                        }
+                    }
+                }
+                None => {
+                    let err = "Enable AI Processing in Settings to use this mode";
+                    let _ = app.emit(events::RECORDING_ERROR, err);
+                    return Err(err.to_string());
                 }
             }
         }
-    } else {
-        raw_text
+        state::RecordingMode::Translate => {
+            // Translate mode shouldn't go through the recording pipeline,
+            // but if it somehow does, just return the raw text.
+            raw_text
+        }
     };
 
     // Detect if foreground app can accept paste (default: true, only false for Desktop/Finder)
@@ -625,12 +761,23 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
     } else {
         false
     };
-    let output_mode = if !text.is_empty() {
+    let _output_mode = if !text.is_empty() {
         if has_input {
-            // Auto-paste mode: save clipboard → paste → restore
-            if let Err(e) = clipboard::insert_text(&text) {
-                let _ = app.emit(events::RECORDING_ERROR, format!("clipboard error: {e}"));
-                log::error!("failed to insert text: {}", e);
+            // For VoiceCommand/ClipboardRewrite, use set_and_paste (replaces selection)
+            match active_mode {
+                state::RecordingMode::VoiceCommand | state::RecordingMode::ClipboardRewrite => {
+                    if let Err(e) = clipboard::set_and_paste(&text) {
+                        let _ = app.emit(events::RECORDING_ERROR, format!("clipboard error: {e}"));
+                        log::error!("failed to paste text: {}", e);
+                    }
+                }
+                _ => {
+                    // Auto-paste mode: save clipboard → paste → restore
+                    if let Err(e) = clipboard::insert_text(&text) {
+                        let _ = app.emit(events::RECORDING_ERROR, format!("clipboard error: {e}"));
+                        log::error!("failed to insert text: {}", e);
+                    }
+                }
             }
             events::MODE_PASTED
         } else {
@@ -645,10 +792,13 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         events::MODE_PASTED // empty text, doesn't matter
     };
 
+    // Use mode-specific event mode string
+    let mode_str = active_mode.event_mode_str();
+
     reset_to_idle(&state, app);
     let _ = app.emit(
         events::TRANSCRIPTION_COMPLETE,
-        serde_json::json!({ "text": text, "mode": output_mode }),
+        serde_json::json!({ "text": text, "mode": mode_str }),
     );
 
     // Auto-hide main window 8s after transcription complete
@@ -777,7 +927,7 @@ async fn download_model_cmd(app: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn start_recording(app: tauri::AppHandle) -> Result<(), String> {
-    do_start_recording(&app)
+    do_start_recording(&app, state::RecordingMode::Dictation)
 }
 
 #[tauri::command]
@@ -800,18 +950,19 @@ fn save_settings(
     state: tauri::State<'_, MurmurState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
-    // Reject if translate hotkey conflicts with PTT key
-    if new_settings.translate_hotkey == new_settings.ptt_key {
-        return Err("Translate hotkey cannot be the same as Push-to-Talk key".to_string());
-    }
+    // Apply all hotkey changes
+    let dict_t = new_settings.ptt_key_target();
+    hotkey::set_hotkey_target(dict_t.modifier_mask, dict_t.regular_key);
 
-    // Apply hotkey change
-    let t = new_settings.ptt_key_target();
-    hotkey::set_hotkey_target(t.modifier_mask, t.regular_key);
-
-    // Apply translate hotkey change
     let tr = new_settings.translate_key_target();
     hotkey::set_translate_target(tr.modifier_mask, tr.regular_key);
+
+    // Set VoiceCommand and ClipboardRewrite hotkeys
+    let vc = new_settings.voice_command_key_target();
+    hotkey::set_hotkey(state::RecordingMode::VoiceCommand, vc.modifier_mask, vc.regular_key);
+
+    let cr = new_settings.clipboard_rewrite_key_target();
+    hotkey::set_hotkey(state::RecordingMode::ClipboardRewrite, cr.modifier_mask, cr.regular_key);
 
     // Apply window opacity
     if let Some(window) = app.get_webview_window("main") {
@@ -921,7 +1072,7 @@ fn request_microphone() {
 
 #[tauri::command]
 fn pause_hotkey_listener() {
-    hotkey::pause_hotkey();
+    hotkey::pause_hotkey(state::RecordingMode::Dictation);
 }
 
 #[tauri::command]
@@ -934,7 +1085,7 @@ fn resume_hotkey_listener(state: tauri::State<'_, MurmurState>) {
 
 #[tauri::command]
 fn pause_translate_hotkey() {
-    hotkey::pause_translate_hotkey();
+    hotkey::pause_hotkey(state::RecordingMode::Translate);
 }
 
 #[tauri::command]
@@ -1089,10 +1240,16 @@ pub fn run() {
                 initial_settings.onboarding_complete,
                 initial_settings.recording_mode
             );
+
+            // Set all hotkey slots
             let t = initial_settings.ptt_key_target();
             hotkey::set_hotkey_target(t.modifier_mask, t.regular_key);
             let tr = initial_settings.translate_key_target();
             hotkey::set_translate_target(tr.modifier_mask, tr.regular_key);
+            let vc = initial_settings.voice_command_key_target();
+            hotkey::set_hotkey(state::RecordingMode::VoiceCommand, vc.modifier_mask, vc.regular_key);
+            let cr = initial_settings.clipboard_rewrite_key_target();
+            hotkey::set_hotkey(state::RecordingMode::ClipboardRewrite, cr.modifier_mask, cr.regular_key);
 
             // Register MurmurState with the resolved app_data_dir.
             // engine_init_done starts as `false` only when background engine init will run
@@ -1114,6 +1271,8 @@ pub fn run() {
                 manual_show: AtomicBool::new(false),
                 downloading: AtomicBool::new(false),
                 translating: AtomicBool::new(false),
+                active_mode: Mutex::new(state::RecordingMode::Dictation),
+                captured_context: Mutex::new(None),
             });
 
             // Create system tray with Settings + Show/Hide + Quit
@@ -1257,6 +1416,7 @@ pub fn run() {
                 let mut is_recording = false;
                 let mut last_toggle: Option<Instant> = None;
                 let mut recording_started_at: Option<Instant> = None;
+                let mut _active_recording_mode = state::RecordingMode::Dictation;
                 while let Ok(event) = receiver.recv() {
                     if event == hotkey::HotkeyEvent::EventTapFailed {
                         let _ = app_handle.emit(events::ACCESSIBILITY_ERROR, ());
@@ -1272,17 +1432,67 @@ pub fn run() {
                         continue;
                     }
 
-                    let mode = {
-                        let ms = app_handle.state::<MurmurState>();
-                        ms.settings
-                            .lock()
-                            .map(|s| s.recording_mode.clone())
-                            .unwrap_or_else(|_| "hold".to_string())
-                    };
-
                     match event {
-                        hotkey::HotkeyEvent::Pressed => {
-                            match mode.as_str() {
+                        hotkey::HotkeyEvent::Pressed(mode) => {
+                            // Translate mode doesn't use the recording pipeline
+                            if mode == state::RecordingMode::Translate {
+                                let murmur_state = app_handle.state::<MurmurState>();
+                                let current = murmur_state.app_state.current();
+
+                                if current != state::RecordingState::Idle {
+                                    // Check for modifier conflict
+                                    let is_modifier_conflict = is_recording
+                                        && matches!(
+                                            current,
+                                            state::RecordingState::Starting
+                                                | state::RecordingState::Recording
+                                        )
+                                        && recording_started_at
+                                            .map(|t| t.elapsed() < MODIFIER_CONFLICT_WINDOW)
+                                            .unwrap_or(false);
+
+                                    if !is_modifier_conflict {
+                                        continue; // genuinely busy
+                                    }
+
+                                    log::info!("translate hotkey: cancelling modifier-conflict recording");
+                                    cancel_active_recording(&murmur_state);
+                                    is_recording = false;
+                                    recording_started_at = None;
+                                    reset_to_idle(&murmur_state, &app_handle);
+                                }
+                                if murmur_state
+                                    .translating
+                                    .swap(true, Ordering::Acquire)
+                                {
+                                    continue; // already in progress
+                                }
+                                let app2 = app_handle.clone();
+                                std::thread::spawn(move || {
+                                    let ms = app2.state::<MurmurState>();
+                                    let result = do_translate(&app2);
+                                    ms.translating.store(false, Ordering::Release);
+                                    if let Err(e) = result {
+                                        let _ = app2.emit(events::RECORDING_ERROR, e);
+                                        let _ = app2.emit(
+                                            events::RECORDING_STATE_CHANGED,
+                                            events::STATE_IDLE,
+                                        );
+                                    }
+                                });
+                                continue;
+                            }
+
+                            // Recording modes (Dictation, VoiceCommand, ClipboardRewrite)
+                            let rec_mode = {
+                                let ms = app_handle.state::<MurmurState>();
+                                ms.settings
+                                    .lock()
+                                    .map(|s| s.recording_mode.clone())
+                                    .unwrap_or_else(|_| "hold".to_string())
+                            };
+
+                            match rec_mode.as_str() {
                                 "toggle" => {
                                     // Debounce: skip if last toggle was < 500ms ago
                                     if let Some(last) = last_toggle {
@@ -1307,9 +1517,10 @@ pub fn run() {
                                             hide_main_window(&app_handle);
                                         }
                                     } else if current == state::RecordingState::Idle {
-                                        match do_start_recording(&app_handle) {
+                                        match do_start_recording(&app_handle, mode) {
                                             Ok(()) => {
                                                 is_recording = true;
+                                                _active_recording_mode = mode;
                                                 recording_started_at = Some(Instant::now());
                                             }
                                             Err(e) => {
@@ -1317,6 +1528,7 @@ pub fn run() {
                                                     "failed to start recording: {}",
                                                     e
                                                 );
+                                                let _ = app_handle.emit(events::RECORDING_ERROR, e);
                                             }
                                         }
                                     }
@@ -1332,20 +1544,29 @@ pub fn run() {
                                     {
                                         continue;
                                     }
-                                    match do_start_recording(&app_handle) {
+                                    match do_start_recording(&app_handle, mode) {
                                         Ok(()) => {
                                             is_recording = true;
+                                            _active_recording_mode = mode;
                                             recording_started_at = Some(Instant::now());
                                         }
                                         Err(e) => {
                                             log::error!("failed to start recording: {}", e);
+                                            let _ = app_handle.emit(events::RECORDING_ERROR, e);
                                         }
                                     }
                                 }
                             }
                         }
-                        hotkey::HotkeyEvent::Released => {
-                            if mode == "toggle" || !is_recording {
+                        hotkey::HotkeyEvent::Released(_mode) => {
+                            let rec_mode = {
+                                let ms = app_handle.state::<MurmurState>();
+                                ms.settings
+                                    .lock()
+                                    .map(|s| s.recording_mode.clone())
+                                    .unwrap_or_else(|_| "hold".to_string())
+                            };
+                            if rec_mode == "toggle" || !is_recording {
                                 continue;
                             }
                             is_recording = false;
@@ -1387,56 +1608,6 @@ pub fn run() {
                             });
                         }
                         hotkey::HotkeyEvent::EventTapFailed => unreachable!(),
-                        hotkey::HotkeyEvent::TranslatePressed => {
-                            let murmur_state = app_handle.state::<MurmurState>();
-                            let current = murmur_state.app_state.current();
-
-                            if current != state::RecordingState::Idle {
-                                // If recording just started within MODIFIER_CONFLICT_WINDOW,
-                                // it's likely a modifier conflict: modifier-only PTT fired
-                                // on the shared modifier before the translate combo completed.
-                                // Cancel the accidental recording and proceed to translate.
-                                let is_modifier_conflict = is_recording
-                                    && matches!(
-                                        current,
-                                        state::RecordingState::Starting
-                                            | state::RecordingState::Recording
-                                    )
-                                    && recording_started_at
-                                        .map(|t| t.elapsed() < MODIFIER_CONFLICT_WINDOW)
-                                        .unwrap_or(false);
-
-                                if !is_modifier_conflict {
-                                    continue; // genuinely busy
-                                }
-
-                                log::info!("translate hotkey: cancelling modifier-conflict recording");
-                                cancel_active_recording(&murmur_state);
-                                is_recording = false;
-                                recording_started_at = None;
-                                reset_to_idle(&murmur_state, &app_handle);
-                            }
-                            if murmur_state
-                                .translating
-                                .swap(true, Ordering::Acquire)
-                            {
-                                continue; // already in progress
-                            }
-                            let app2 = app_handle.clone();
-                            std::thread::spawn(move || {
-                                let ms = app2.state::<MurmurState>();
-                                let result = do_translate(&app2);
-                                ms.translating.store(false, Ordering::Release);
-                                if let Err(e) = result {
-                                    let _ = app2.emit(events::RECORDING_ERROR, e);
-                                    let _ = app2.emit(
-                                        events::RECORDING_STATE_CHANGED,
-                                        events::STATE_IDLE,
-                                    );
-                                }
-                            });
-                            continue;
-                        }
                     }
                 }
             });

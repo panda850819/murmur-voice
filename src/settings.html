@@ -17,16 +17,30 @@
 
       <header class="header">
         <h1 data-i18n="header.title">Preferences</h1>
-        <span class="version">v0.4.3</span>
+        <span class="version">v0.5.0</span>
       </header>
 
       <section class="group">
-        <div class="group-label" data-i18n="group.input">Input</div>
+        <div class="group-label" data-i18n="group.hotkeys">Hotkeys</div>
         <div class="group-card">
           <div class="row">
-            <span class="row-label" data-i18n="row.ptt">Push-to-Talk</span>
+            <span class="row-label" data-i18n="row.hotkeyDictation">Dictation</span>
             <button id="ptt-record" class="record-btn">Left Option</button>
           </div>
+          <div class="row">
+            <span class="row-label" data-i18n="row.hotkeyTranslate">Translate</span>
+            <button id="translate-record" class="record-btn">Option + T</button>
+          </div>
+          <div class="row">
+            <span class="row-label" data-i18n="row.hotkeyVoiceCommand">Voice Command</span>
+            <button id="voice-command-record" class="record-btn" data-i18n="hotkey.notSet">Not set</button>
+          </div>
+          <div class="row-desc" data-i18n="hint.voiceCommand">Speak a command to process selected text with AI</div>
+          <div class="row">
+            <span class="row-label" data-i18n="row.hotkeyClipboardRewrite">Clipboard Rewrite</span>
+            <button id="clipboard-rewrite-record" class="record-btn" data-i18n="hotkey.notSet">Not set</button>
+          </div>
+          <div class="row-desc" data-i18n="hint.clipboardRewrite">Speak a command to process clipboard content with AI</div>
         </div>
       </section>
 
@@ -195,10 +209,6 @@
       <section class="group">
         <div class="group-label" data-i18n="group.translation">Translation</div>
         <div class="group-card">
-          <div class="row">
-            <span class="row-label" data-i18n="row.translateHotkey">Translate Hotkey</span>
-            <button id="translate-record" class="record-btn">Option + T</button>
-          </div>
           <div class="row">
             <span class="row-label" data-i18n="row.translateLang">Target Language</span>
             <select id="translate-language">

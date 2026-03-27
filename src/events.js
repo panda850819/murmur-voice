@@ -12,6 +12,7 @@ const EVENTS = {
   ENHANCER_INFO: "enhancer_info",
   RECORDING_CANCELLED: "recording_cancelled",
   TRANSCRIPTION_ENGINE_INFO: "transcription_engine_info",
+  RECORDING_MODE_INFO: "recording_mode_info",
 };
 
 const RECORDING_STATES = {
@@ -28,6 +29,9 @@ const TRANSCRIPTION_MODES = {
   PASTED: "pasted",
   CLIPBOARD: "clipboard",
   TRANSLATED: "translated",
+  DICTATED: "dictated",
+  VOICE_COMMAND: "voice_command",
+  CLIPBOARD_REWRITE: "clipboard_rewrite",
 };
 
 const COMMANDS = {
