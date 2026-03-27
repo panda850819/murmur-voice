@@ -54,4 +54,5 @@ const COMMANDS = {
   RESUME_TRANSLATE_HOTKEY: "resume_translate_hotkey",
   COMPLETE_ONBOARDING: "complete_onboarding",
   TRANSLATE_TEXT: "translate_text",
+  RESIZE_MAIN_WINDOW: "resize_main_window",
 };

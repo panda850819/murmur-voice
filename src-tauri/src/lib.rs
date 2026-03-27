@@ -38,6 +38,7 @@ const PREVIEW_WINDOW_GAP: f64 = 8.0;
 const MAIN_WINDOW_WIDTH: f64 = 420.0;
 const MAIN_WINDOW_HEIGHT: f64 = 48.0;
 const MAIN_WINDOW_BOTTOM_MARGIN: f64 = 80.0;
+const MAIN_WINDOW_MAX_HEIGHT: f64 = 120.0;
 
 pub(crate) struct MurmurState {
     app_data_dir: PathBuf,
@@ -863,6 +864,21 @@ async fn check_for_updates() -> Result<UpdateCheckResult, String> {
 }
 
 #[tauri::command]
+fn resize_main_window(app: tauri::AppHandle, height: f64) {
+    let h = height.clamp(MAIN_WINDOW_HEIGHT, MAIN_WINDOW_MAX_HEIGHT);
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.set_size(tauri::LogicalSize::new(MAIN_WINDOW_WIDTH, h));
+        if let Some(monitor) = w.current_monitor().ok().flatten() {
+            let scale = monitor.scale_factor();
+            let screen = monitor.size();
+            let x = (screen.width as f64 / scale - MAIN_WINDOW_WIDTH) / 2.0;
+            let y = screen.height as f64 / scale - h - MAIN_WINDOW_BOTTOM_MARGIN;
+            let _ = w.set_position(tauri::LogicalPosition::new(x, y));
+        }
+    }
+}
+
+#[tauri::command]
 async fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
     const ALLOWED_SCHEMES: &[&str] = &["http://", "https://", "x-apple.systempreferences:"];
     if !ALLOWED_SCHEMES.iter().any(|s| url.starts_with(s)) {
@@ -1230,6 +1246,7 @@ pub fn run() {
             check_microphone,
             request_microphone,
             open_url,
+            resize_main_window,
         ])
         .setup(|app| {
             // Resolve app data directory from Tauri
