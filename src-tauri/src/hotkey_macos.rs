@@ -62,11 +62,13 @@ pub(crate) fn pause_all_hotkeys() {
 // --- Legacy shim functions for existing callers (will be refactored in later phases) ---
 
 /// Legacy: set dictation hotkey target.
+#[allow(dead_code)]
 pub(crate) fn set_hotkey_target(modifier: u64, regular_key: u32) {
     set_hotkey(RecordingMode::Dictation, modifier, regular_key);
 }
 
 /// Legacy: set translate hotkey target.
+#[allow(dead_code)]
 pub(crate) fn set_translate_target(modifier: u64, regular_key: u32) {
     set_hotkey(RecordingMode::Translate, modifier, regular_key);
 }
@@ -142,9 +144,15 @@ static KEY_WAS_DOWN: AtomicBool = AtomicBool::new(false);
 
 // State for combo mode (per-slot edge detection)
 // For simplicity, we track a single combo state — only one combo can be active at a time.
-static _MODIFIER_HELD_SLOT: AtomicU32 = AtomicU32::new(u32::MAX); // which slot's modifier is held (MAX = none)
 static COMBO_ACTIVE: AtomicBool = AtomicBool::new(false);
 static COMBO_ACTIVE_SLOT: AtomicU32 = AtomicU32::new(u32::MAX);
+
+const MODES: [RecordingMode; 4] = [
+    RecordingMode::Dictation,
+    RecordingMode::Translate,
+    RecordingMode::VoiceCommand,
+    RecordingMode::ClipboardRewrite,
+];
 
 /// Mode order for matching: combo-only modes first (more specific), modifier-only last.
 /// VoiceCommand(2), ClipboardRewrite(3), Translate(1), Dictation(0)
@@ -153,12 +161,6 @@ const MATCH_ORDER: [usize; 4] = [2, 3, 1, 0];
 /// Find which slot matches the given flags + keycode for a key-down event.
 /// Returns (slot_index, RecordingMode) if found.
 fn find_combo_match(keycode: u32, flags: u64) -> Option<(usize, RecordingMode)> {
-    let modes = [
-        RecordingMode::Dictation,
-        RecordingMode::Translate,
-        RecordingMode::VoiceCommand,
-        RecordingMode::ClipboardRewrite,
-    ];
     for &idx in &MATCH_ORDER {
         let slot = &HOTKEY_SLOTS[idx];
         let mask = slot.modifier_mask.load(Ordering::SeqCst);
@@ -167,7 +169,7 @@ fn find_combo_match(keycode: u32, flags: u64) -> Option<(usize, RecordingMode)> 
             continue; // disabled slot
         }
         if rk != 0 && keycode == rk && (flags & mask) == mask {
-            return Some((idx, modes[idx]));
+            return Some((idx, MODES[idx]));
         }
     }
     None
@@ -215,13 +217,7 @@ unsafe extern "C" fn event_tap_callback(
             let rk = slot.regular_key.load(Ordering::SeqCst);
             if keycode == rk {
                 COMBO_ACTIVE.store(false, Ordering::SeqCst);
-                let modes = [
-                    RecordingMode::Dictation,
-                    RecordingMode::Translate,
-                    RecordingMode::VoiceCommand,
-                    RecordingMode::ClipboardRewrite,
-                ];
-                let _ = sender.send(HotkeyEvent::Released(modes[active_idx]));
+                let _ = sender.send(HotkeyEvent::Released(MODES[active_idx]));
                 return std::ptr::null_mut(); // consume event
             }
         }
@@ -236,13 +232,7 @@ unsafe extern "C" fn event_tap_callback(
             let flags = CGEventGetFlags(event);
             if (flags & mask) == 0 {
                 COMBO_ACTIVE.store(false, Ordering::SeqCst);
-                let modes = [
-                    RecordingMode::Dictation,
-                    RecordingMode::Translate,
-                    RecordingMode::VoiceCommand,
-                    RecordingMode::ClipboardRewrite,
-                ];
-                let _ = sender.send(HotkeyEvent::Released(modes[active_idx]));
+                let _ = sender.send(HotkeyEvent::Released(MODES[active_idx]));
             }
         }
         // Fall through to check modifier-only mode

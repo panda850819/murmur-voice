@@ -27,12 +27,4 @@ pub const STATE_PROCESSING: &str = "processing";
 pub const STATE_TRANSLATING: &str = "translating";
 
 // --- Transcription output modes ---
-pub const MODE_PASTED: &str = "pasted";
-pub const MODE_CLIPBOARD: &str = "clipboard";
 pub const MODE_TRANSLATED: &str = "translated";
-#[allow(dead_code)]
-pub const MODE_DICTATED: &str = "dictated";
-#[allow(dead_code)]
-pub const MODE_VOICE_COMMAND: &str = "voice_command";
-#[allow(dead_code)]
-pub const MODE_CLIPBOARD_REWRITE: &str = "clipboard_rewrite";

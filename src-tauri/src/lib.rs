@@ -761,7 +761,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
     } else {
         false
     };
-    let _output_mode = if !text.is_empty() {
+    if !text.is_empty() {
         if has_input {
             // For VoiceCommand/ClipboardRewrite, use set_and_paste (replaces selection)
             match active_mode {
@@ -779,18 +779,14 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
                     }
                 }
             }
-            events::MODE_PASTED
         } else {
             // Clipboard-only mode: just copy, no paste simulation
             if let Err(e) = clipboard::copy_only(&text) {
                 let _ = app.emit(events::RECORDING_ERROR, format!("clipboard error: {e}"));
                 log::error!("failed to copy text: {}", e);
             }
-            events::MODE_CLIPBOARD
         }
-    } else {
-        events::MODE_PASTED // empty text, doesn't matter
-    };
+    }
 
     // Use mode-specific event mode string
     let mode_str = active_mode.event_mode_str();
@@ -952,10 +948,10 @@ fn save_settings(
 ) -> Result<(), String> {
     // Apply all hotkey changes
     let dict_t = new_settings.ptt_key_target();
-    hotkey::set_hotkey_target(dict_t.modifier_mask, dict_t.regular_key);
+    hotkey::set_hotkey(state::RecordingMode::Dictation, dict_t.modifier_mask, dict_t.regular_key);
 
     let tr = new_settings.translate_key_target();
-    hotkey::set_translate_target(tr.modifier_mask, tr.regular_key);
+    hotkey::set_hotkey(state::RecordingMode::Translate, tr.modifier_mask, tr.regular_key);
 
     // Set VoiceCommand and ClipboardRewrite hotkeys
     let vc = new_settings.voice_command_key_target();
@@ -1079,7 +1075,7 @@ fn pause_hotkey_listener() {
 fn resume_hotkey_listener(state: tauri::State<'_, MurmurState>) {
     if let Ok(s) = state.settings.lock() {
         let t = s.ptt_key_target();
-        hotkey::set_hotkey_target(t.modifier_mask, t.regular_key);
+        hotkey::set_hotkey(state::RecordingMode::Dictation, t.modifier_mask, t.regular_key);
     }
 }
 
@@ -1092,7 +1088,7 @@ fn pause_translate_hotkey() {
 fn resume_translate_hotkey(state: tauri::State<'_, MurmurState>) {
     if let Ok(s) = state.settings.lock() {
         let t = s.translate_key_target();
-        hotkey::set_translate_target(t.modifier_mask, t.regular_key);
+        hotkey::set_hotkey(state::RecordingMode::Translate, t.modifier_mask, t.regular_key);
     }
 }
 
@@ -1243,9 +1239,9 @@ pub fn run() {
 
             // Set all hotkey slots
             let t = initial_settings.ptt_key_target();
-            hotkey::set_hotkey_target(t.modifier_mask, t.regular_key);
+            hotkey::set_hotkey(state::RecordingMode::Dictation, t.modifier_mask, t.regular_key);
             let tr = initial_settings.translate_key_target();
-            hotkey::set_translate_target(tr.modifier_mask, tr.regular_key);
+            hotkey::set_hotkey(state::RecordingMode::Translate, tr.modifier_mask, tr.regular_key);
             let vc = initial_settings.voice_command_key_target();
             hotkey::set_hotkey(state::RecordingMode::VoiceCommand, vc.modifier_mask, vc.regular_key);
             let cr = initial_settings.clipboard_rewrite_key_target();
@@ -1416,7 +1412,6 @@ pub fn run() {
                 let mut is_recording = false;
                 let mut last_toggle: Option<Instant> = None;
                 let mut recording_started_at: Option<Instant> = None;
-                let mut _active_recording_mode = state::RecordingMode::Dictation;
                 while let Ok(event) = receiver.recv() {
                     if event == hotkey::HotkeyEvent::EventTapFailed {
                         let _ = app_handle.emit(events::ACCESSIBILITY_ERROR, ());
@@ -1520,7 +1515,6 @@ pub fn run() {
                                         match do_start_recording(&app_handle, mode) {
                                             Ok(()) => {
                                                 is_recording = true;
-                                                _active_recording_mode = mode;
                                                 recording_started_at = Some(Instant::now());
                                             }
                                             Err(e) => {
@@ -1547,7 +1541,6 @@ pub fn run() {
                                     match do_start_recording(&app_handle, mode) {
                                         Ok(()) => {
                                             is_recording = true;
-                                            _active_recording_mode = mode;
                                             recording_started_at = Some(Instant::now());
                                         }
                                         Err(e) => {
