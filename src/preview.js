@@ -374,6 +374,12 @@ window.addEventListener("DOMContentLoaded", async () => {
       copyBtn().classList.add("hidden");
       closeBtn().classList.add("hidden");
       disableEditing();
+      // Auto-hide after 3s for empty results
+      autoHideTimer = setTimeout(async () => {
+        try {
+          await invoke(COMMANDS.HIDE_OVERLAY_WINDOWS);
+        } catch (_) {}
+      }, 3000);
     } else {
       setHeader(t("state.done"), false);
       if (mode === TRANSCRIPTION_MODES.TRANSLATED) {
