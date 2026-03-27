@@ -67,6 +67,7 @@ pub(crate) fn pause_hotkey(mode: RecordingMode) {
 }
 
 /// Disable all hotkey slots.
+#[allow(dead_code)]
 pub(crate) fn pause_all_hotkeys() {
     for slot in &HOTKEY_SLOTS {
         slot.modifier_mask.store(0, Ordering::SeqCst);
