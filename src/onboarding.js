@@ -144,6 +144,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (badge) {
       badge.textContent = micGranted ? "\u2705" : "\u274C";
     }
+    updatePermNext();
   }
 
   async function checkAccStatus() {
@@ -155,6 +156,14 @@ window.addEventListener("DOMContentLoaded", async () => {
     const badge = el("acc-status");
     if (badge) {
       badge.textContent = accGranted ? "\u2705" : "\u274C";
+    }
+    updatePermNext();
+  }
+
+  function updatePermNext() {
+    const btn = el("btn-perm-next");
+    if (btn) {
+      btn.disabled = !(micGranted && accGranted);
     }
   }
 
