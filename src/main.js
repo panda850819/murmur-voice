@@ -8,9 +8,10 @@ let progressContainer;
 let progressBar;
 let appBadge;
 let appEl;
-let isRecording = false;
 let isCollapsing = false;
 let recordingMaxHeight = 0;
+const MAIN_BAR_HEIGHT = 48;
+const MAIN_BAR_MARGIN = 8;
 
 function setStatus(state, text) {
   const dot = statusDot;
@@ -22,19 +23,16 @@ function setStatus(state, text) {
 }
 
 function expandMainBar() {
-  isRecording = true;
   isCollapsing = false;
   recordingMaxHeight = 0;
   appEl.classList.remove("collapsing");
   appEl.classList.add("expanded");
   transcription.classList.add("multiline");
-  // Don't resize yet — grows gradually as text arrives via PARTIAL_TRANSCRIPTION
 }
 
 function maybeExpandToFitContent() {
-  if (!isRecording) return;
-  // scrollHeight gives full content height even when overflow is constrained
-  const neededHeight = appEl.scrollHeight + 8; // +8 for margin
+  if (!appEl.classList.contains("expanded")) return;
+  const neededHeight = appEl.scrollHeight + MAIN_BAR_MARGIN;
   if (neededHeight > recordingMaxHeight) {
     recordingMaxHeight = neededHeight;
     invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: neededHeight });
@@ -42,34 +40,30 @@ function maybeExpandToFitContent() {
 }
 
 function collapseMainBar() {
-  isRecording = false;
+  if (isCollapsing) return;
   isCollapsing = true;
   appEl.classList.remove("expanded");
   transcription.classList.remove("multiline");
   transcription.textContent = "";
   appEl.classList.add("collapsing");
-  // Directly invoke resize to 48px (bypass ResizeObserver)
-  invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: 48 });
-  // Clear collapsing flag after transition
+  invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: MAIN_BAR_HEIGHT });
   appEl.addEventListener("transitionend", () => {
     isCollapsing = false;
     appEl.classList.remove("collapsing");
   }, { once: true });
-  // Fallback: clear flag after 200ms if transitionend doesn't fire
+  // Fallback if transitionend doesn't fire (element hidden or transition cancelled)
   setTimeout(() => {
     isCollapsing = false;
     appEl.classList.remove("collapsing");
-  }, 200);
+  }, 170);
 }
 
 function resetMainBar() {
-  // Immediate reset without animation (error/cancel)
-  isRecording = false;
   isCollapsing = false;
   recordingMaxHeight = 0;
   appEl.classList.remove("expanded", "collapsing");
   transcription.classList.remove("multiline");
-  invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: 48 });
+  invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: MAIN_BAR_HEIGHT });
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -131,7 +125,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         setStatus(null, t("state.ready"));
         appBadge.classList.remove("visible");
         appBadge.textContent = "";
-        if (isRecording || appEl.classList.contains("expanded")) {
+        if (appEl.classList.contains("expanded")) {
           collapseMainBar();
         }
         break;

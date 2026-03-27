@@ -869,18 +869,22 @@ async fn check_for_updates() -> Result<UpdateCheckResult, String> {
     })
 }
 
+fn position_main_window_bottom_center(window: &tauri::WebviewWindow, height: f64) {
+    if let Some(monitor) = window.current_monitor().ok().flatten() {
+        let scale = monitor.scale_factor();
+        let screen = monitor.size();
+        let x = (screen.width as f64 / scale - MAIN_WINDOW_WIDTH) / 2.0;
+        let y = screen.height as f64 / scale - height - MAIN_WINDOW_BOTTOM_MARGIN;
+        let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+    }
+}
+
 #[tauri::command]
 fn resize_main_window(app: tauri::AppHandle, height: f64) {
     let h = height.clamp(MAIN_WINDOW_HEIGHT, MAIN_WINDOW_MAX_HEIGHT);
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.set_size(tauri::LogicalSize::new(MAIN_WINDOW_WIDTH, h));
-        if let Some(monitor) = w.current_monitor().ok().flatten() {
-            let scale = monitor.scale_factor();
-            let screen = monitor.size();
-            let x = (screen.width as f64 / scale - MAIN_WINDOW_WIDTH) / 2.0;
-            let y = screen.height as f64 / scale - h - MAIN_WINDOW_BOTTOM_MARGIN;
-            let _ = w.set_position(tauri::LogicalPosition::new(x, y));
-        }
+        position_main_window_bottom_center(&w, h);
     }
 }
 
@@ -1361,20 +1365,7 @@ pub fn run() {
 
             // Position main window at bottom center
             if let Some(window) = app.get_webview_window("main") {
-                if let Some(monitor) = window.current_monitor().ok().flatten() {
-                    let screen = monitor.size();
-                    let scale = monitor.scale_factor();
-                    let win_w = MAIN_WINDOW_WIDTH;
-                    let win_h = MAIN_WINDOW_HEIGHT;
-                    let margin = MAIN_WINDOW_BOTTOM_MARGIN;
-                    let x = (screen.width as f64 / scale - win_w) / 2.0;
-                    let y = screen.height as f64 / scale - win_h - margin;
-                    use tauri::PhysicalPosition;
-                    let _ = window.set_position(PhysicalPosition::new(
-                        (x * scale) as i32,
-                        (y * scale) as i32,
-                    ));
-                }
+                position_main_window_bottom_center(&window, MAIN_WINDOW_HEIGHT);
             }
 
             // Convert overlay windows to NSPanel so they render above fullscreen apps.
