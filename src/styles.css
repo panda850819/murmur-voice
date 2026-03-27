@@ -27,7 +27,8 @@ html, body {
 }
 
 #app.expanded {
-  align-items: flex-end;
+  flex-wrap: wrap;
+  align-content: flex-end;
   padding: 8px 16px;
   transition: none;
 }
@@ -105,7 +106,10 @@ html, body {
   word-break: break-word;
   line-height: 1.5;
   text-overflow: clip;
-  overflow-y: hidden;
+  overflow-y: auto;
+  flex-basis: 100%;
+  order: -1;
+  margin-bottom: 4px;
 }
 
 .progress-container {

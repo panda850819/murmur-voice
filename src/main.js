@@ -10,8 +10,6 @@ let appBadge;
 let appEl;
 let isRecording = false;
 let isCollapsing = false;
-let recordingMaxHeight = 0;
-let resizeDebounceTimer = null;
 
 function setStatus(state, text) {
   const dot = statusDot;
@@ -25,10 +23,11 @@ function setStatus(state, text) {
 function expandMainBar() {
   isRecording = true;
   isCollapsing = false;
-  recordingMaxHeight = 0;
   appEl.classList.remove("collapsing");
   appEl.classList.add("expanded");
   transcription.classList.add("multiline");
+  // Expand to max height immediately (no gradual resize)
+  invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: 120 });
 }
 
 function collapseMainBar() {
@@ -56,7 +55,6 @@ function resetMainBar() {
   // Immediate reset without animation (error/cancel)
   isRecording = false;
   isCollapsing = false;
-  recordingMaxHeight = 0;
   appEl.classList.remove("expanded", "collapsing");
   transcription.classList.remove("multiline");
   invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: 48 });
@@ -70,26 +68,6 @@ window.addEventListener("DOMContentLoaded", async () => {
   progressBar = document.getElementById("progress-bar");
   appBadge = document.getElementById("app-badge");
   appEl = document.getElementById("app");
-
-  // ResizeObserver: notify backend when #app height changes during recording
-  const resizeObserver = new ResizeObserver((entries) => {
-    if (isCollapsing) return;
-    if (!isRecording) return;
-    const entry = entries[0];
-    const newHeight = entry.contentBoxSize?.[0]?.blockSize
-      ?? entry.contentRect.height;
-    // Add margin (4px top + 4px bottom = 8px)
-    const windowHeight = newHeight + 8;
-    // Expand-only: never shrink during recording
-    if (windowHeight <= recordingMaxHeight) return;
-    recordingMaxHeight = windowHeight;
-    // Debounce backend calls
-    clearTimeout(resizeDebounceTimer);
-    resizeDebounceTimer = setTimeout(() => {
-      invoke(COMMANDS.RESIZE_MAIN_WINDOW, { height: windowHeight });
-    }, 50);
-  });
-  resizeObserver.observe(appEl);
 
   // Load locale
   try {
