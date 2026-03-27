@@ -26,8 +26,6 @@ const RECORDING_STATES = {
 };
 
 const TRANSCRIPTION_MODES = {
-  PASTED: "pasted",
-  CLIPBOARD: "clipboard",
   TRANSLATED: "translated",
   DICTATED: "dictated",
   VOICE_COMMAND: "voice_command",

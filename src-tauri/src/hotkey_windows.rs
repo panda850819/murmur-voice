@@ -49,10 +49,6 @@ static KEY_WAS_DOWN: AtomicBool = AtomicBool::new(false);
 static COMBO_ACTIVE: AtomicBool = AtomicBool::new(false);
 static COMBO_ACTIVE_SLOT: AtomicU32 = AtomicU32::new(u32::MAX);
 
-/// Track modifier held state per slot for combo detection.
-static MODIFIER_HELD: AtomicBool = AtomicBool::new(false);
-static MODIFIER_HELD_SLOT: AtomicU32 = AtomicU32::new(u32::MAX);
-
 /// Global sender for the hook callback. Set once before installing the hook.
 static mut GLOBAL_SENDER: Option<mpsc::Sender<HotkeyEvent>> = None;
 
@@ -76,24 +72,6 @@ pub(crate) fn pause_all_hotkeys() {
         slot.modifier_mask.store(0, Ordering::SeqCst);
         slot.regular_key.store(0, Ordering::SeqCst);
     }
-}
-
-// --- Legacy shim functions ---
-
-pub(crate) fn set_hotkey_target(modifier: u64, regular_key: u32) {
-    set_hotkey(RecordingMode::Dictation, modifier, regular_key);
-}
-
-pub(crate) fn set_translate_target(modifier: u64, regular_key: u32) {
-    set_hotkey(RecordingMode::Translate, modifier, regular_key);
-}
-
-pub(crate) fn pause_hotkey_legacy() {
-    pause_hotkey(RecordingMode::Dictation);
-}
-
-pub(crate) fn pause_translate_hotkey() {
-    pause_hotkey(RecordingMode::Translate);
 }
 
 const MODES: [RecordingMode; 4] = [

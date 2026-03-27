@@ -54,9 +54,7 @@ let replaceUndoEntry = null; // { rule, index }
 let currentTranslateKey = "AltLeft+KeyT";
 let currentVoiceCommandKey = "";
 let currentClipboardRewriteKey = "";
-let isRecordingTranslate = false;
-let activeComboRecorder = null; // { btnId, setter, stateKey }
-let capturedTranslateModifiers = new Set();
+let activeComboRecorder = null; // { btnId, setter, modifiers }
 
 const el = (id) => document.getElementById(id);
 
@@ -100,30 +98,8 @@ function setTranslateKey(code) {
   el("translate-record").textContent = displayNameFor(code);
 }
 
-function startTranslateRecording() {
-  isRecordingTranslate = true;
-  capturedTranslateModifiers.clear();
-  invoke(COMMANDS.PAUSE_TRANSLATE_HOTKEY).catch(() => {});
-  invoke(COMMANDS.PAUSE_HOTKEY_LISTENER).catch(() => {});
-  const btn = el("translate-record");
-  btn.textContent = t("ptt.holdModifier");
-  btn.classList.add("recording");
-}
-
-function stopTranslateRecording() {
-  isRecordingTranslate = false;
-  capturedTranslateModifiers.clear();
-  invoke(COMMANDS.RESUME_TRANSLATE_HOTKEY).catch(() => {});
-  invoke(COMMANDS.RESUME_HOTKEY_LISTENER).catch(() => {});
-  const btn = el("translate-record");
-  btn.classList.remove("recording");
-  btn.textContent = displayNameFor(currentTranslateKey);
-}
-
-
 function startComboRecording(btnId, setter) {
   if (isRecording) stopRecording();
-  if (isRecordingTranslate) stopTranslateRecording();
   if (activeComboRecorder) stopComboRecording();
   activeComboRecorder = { btnId, setter, modifiers: new Set() };
   invoke(COMMANDS.PAUSE_HOTKEY_LISTENER).catch(() => {});
@@ -176,39 +152,25 @@ function handleComboKeyUp(e) {
 
 function handleKeyDown(e) {
   if (handleComboKeyDown(e)) return;
-  if (!isRecording && !isRecordingTranslate) return;
+  if (!isRecording) return;
   e.preventDefault();
   e.stopPropagation();
 
   if (e.code === "Escape") {
-    if (isRecording) stopRecording();
-    if (isRecordingTranslate) stopTranslateRecording();
+    stopRecording();
     return;
   }
 
-  if (isRecording) {
-    if (recordingPhase === "modifier") {
-      if (KEY_MAP[e.code]) {
-        capturedModifier = e.code;
-        recordingPhase = "combo";
-        el("ptt-record").textContent = t("ptt.nowPressKey");
-      }
-    } else if (recordingPhase === "combo") {
-      if (REGULAR_KEY_MAP[e.code]) {
-        currentPttKey = capturedModifier + "+" + e.code;
-        stopRecording();
-      }
-    }
-  }
-
-  if (isRecordingTranslate) {
+  if (recordingPhase === "modifier") {
     if (KEY_MAP[e.code]) {
-      capturedTranslateModifiers.add(e.code);
-      const modNames = Array.from(capturedTranslateModifiers).map(m => KEY_MAP[m]).join(" + ");
-      el("translate-record").textContent = modNames + " + ...";
-    } else if (REGULAR_KEY_MAP[e.code] && capturedTranslateModifiers.size > 0) {
-      currentTranslateKey = Array.from(capturedTranslateModifiers).join("+") + "+" + e.code;
-      stopTranslateRecording();
+      capturedModifier = e.code;
+      recordingPhase = "combo";
+      el("ptt-record").textContent = t("ptt.nowPressKey");
+    }
+  } else if (recordingPhase === "combo") {
+    if (REGULAR_KEY_MAP[e.code]) {
+      currentPttKey = capturedModifier + "+" + e.code;
+      stopRecording();
     }
   }
 }
@@ -219,15 +181,6 @@ function handleKeyUp(e) {
     if (e.code === capturedModifier) {
       currentPttKey = capturedModifier;
       stopRecording();
-    }
-  }
-  if (isRecordingTranslate) {
-    if (capturedTranslateModifiers.has(e.code)) {
-      capturedTranslateModifiers.delete(e.code);
-      if (capturedTranslateModifiers.size === 0) {
-        // All modifiers released without pressing a regular key — cancel
-        stopTranslateRecording();
-      }
     }
   }
 }
@@ -515,12 +468,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   el("translate-record").addEventListener("click", () => {
-    if (isRecordingTranslate) {
-      stopTranslateRecording();
-    } else {
-      if (isRecording) stopRecording();
-      startTranslateRecording();
-    }
+    startComboRecording("translate-record", (v) => {
+      if (v !== undefined) currentTranslateKey = v;
+      return currentTranslateKey;
+    });
   });
 
 

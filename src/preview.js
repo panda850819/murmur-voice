@@ -305,7 +305,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     detectNewWords();
 
     // Restart auto-hide after editing
-    if (currentMode === TRANSCRIPTION_MODES.PASTED) {
+    if (currentMode === TRANSCRIPTION_MODES.DICTATED) {
       autoHideTimer = setTimeout(async () => {
         try {
           await invoke(COMMANDS.HIDE_OVERLAY_WINDOWS);
@@ -389,8 +389,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       originalText = text;
       copyBtn().classList.remove("hidden");
       closeBtn().classList.remove("hidden");
-      if (mode === TRANSCRIPTION_MODES.PASTED || mode === TRANSCRIPTION_MODES.CLIPBOARD
-          || mode === TRANSCRIPTION_MODES.DICTATED) {
+      if (mode === TRANSCRIPTION_MODES.DICTATED) {
         translateBtn().classList.remove("hidden");
         translateBtn().disabled = false;
         translateBtn().classList.remove("translating");
@@ -400,9 +399,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
       enableEditing();
 
-      // Auto-hide: 8s for pasted mode, 30s for clipboard mode, none for translated
+      // Auto-hide: 8s for dictation/voice modes, none for translated
       if (text && text.trim().length > 0 && mode !== TRANSCRIPTION_MODES.TRANSLATED) {
-        const delay = mode === TRANSCRIPTION_MODES.PASTED ? 8000 : 30000;
+        const delay = 8000;
         autoHideTimer = setTimeout(async () => {
           try {
             await invoke(COMMANDS.HIDE_OVERLAY_WINDOWS);

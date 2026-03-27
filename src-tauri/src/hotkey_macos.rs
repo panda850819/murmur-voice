@@ -59,32 +59,6 @@ pub(crate) fn pause_all_hotkeys() {
     }
 }
 
-// --- Legacy shim functions for existing callers (will be refactored in later phases) ---
-
-/// Legacy: set dictation hotkey target.
-#[allow(dead_code)]
-pub(crate) fn set_hotkey_target(modifier: u64, regular_key: u32) {
-    set_hotkey(RecordingMode::Dictation, modifier, regular_key);
-}
-
-/// Legacy: set translate hotkey target.
-#[allow(dead_code)]
-pub(crate) fn set_translate_target(modifier: u64, regular_key: u32) {
-    set_hotkey(RecordingMode::Translate, modifier, regular_key);
-}
-
-/// Legacy: pause dictation hotkey.
-#[allow(dead_code)]
-pub(crate) fn pause_hotkey_legacy() {
-    pause_hotkey(RecordingMode::Dictation);
-}
-
-/// Legacy: pause translate hotkey.
-#[allow(dead_code)]
-pub(crate) fn pause_translate_hotkey() {
-    pause_hotkey(RecordingMode::Translate);
-}
-
 // CGEvent type constants
 const K_CG_EVENT_KEY_DOWN: u32 = 10;
 const K_CG_EVENT_KEY_UP: u32 = 11;
@@ -235,7 +209,7 @@ unsafe extern "C" fn event_tap_callback(
                 let _ = sender.send(HotkeyEvent::Released(MODES[active_idx]));
             }
         }
-        // Fall through to check modifier-only mode
+        return event; // combo is active, skip modifier-only check
     }
 
     // --- Modifier-only mode (Dictation slot only, when regular_key == 0) ---
