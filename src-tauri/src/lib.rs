@@ -572,6 +572,10 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
     // Anti-hallucination: skip if audio is too short or silent (applies to all engines)
     if !audio::is_audio_usable(&samples) {
         reset_to_idle(&state, app);
+        let _ = app.emit(
+            events::TRANSCRIPTION_COMPLETE,
+            serde_json::json!({ "text": "", "mode": active_mode.event_mode_str() }),
+        );
         return Ok(String::new());
     }
 
