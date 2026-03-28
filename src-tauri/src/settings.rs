@@ -1,6 +1,4 @@
 use serde::{Deserialize, Serialize};
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 fn default_true() -> bool {
@@ -162,7 +160,7 @@ pub(crate) fn parse_hotkey(key: &str) -> PttKeyTarget {
 /// Combine multiple modifier masks into a single u64.
 /// macOS: bitwise OR of CGEventFlags device-dependent bits.
 /// Windows: pack VK codes into 16-bit slots (up to 4 modifiers).
-fn combine_modifier_masks(modifiers: &[&str]) -> u64 {
+fn combine_modifier_masks(#[allow(unused_variables)] modifiers: &[&str]) -> u64 {
     #[cfg(target_os = "macos")]
     {
         modifiers
@@ -175,6 +173,10 @@ fn combine_modifier_masks(modifiers: &[&str]) -> u64 {
         modifiers.iter().enumerate().fold(0u64, |acc, (i, &m)| {
             acc | (modifier_mask_for(m) << (i * 16))
         })
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        0
     }
 }
 
@@ -430,11 +432,20 @@ pub(crate) fn save_settings(settings: &Settings, base: &Path) -> Result<(), Stri
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| e.to_string())?;
 
     #[cfg(unix)]
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
-        .map_err(|e| e.to_string())?;
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        use std::io::Write;
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true).mode(0o600);
+        let mut file = options.open(&path).map_err(|e| e.to_string())?;
+        file.write_all(json.as_bytes()).map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(&path, json).map_err(|e| e.to_string())?;
+    }
 
     Ok(())
 }
