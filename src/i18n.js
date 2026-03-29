@@ -280,14 +280,17 @@ const I18N = {
 };
 
 let currentLocale = "en";
+// ⚡ Bolt: Cache the active language map to avoid dictionary lookups on every translation
+let currentMap = I18N.en;
 
 function t(key) {
-  const map = I18N[currentLocale] || I18N.en;
-  return map[key] || I18N.en[key] || key;
+  // ⚡ Bolt: Use the pre-resolved map instead of resolving I18N[currentLocale] || I18N.en on every call
+  return currentMap[key] || I18N.en[key] || key;
 }
 
 function applyLocale(locale) {
   currentLocale = locale;
+  currentMap = I18N[locale] || I18N.en;
   document.querySelectorAll("[data-i18n]").forEach((el) => {
     const key = el.getAttribute("data-i18n");
     const text = t(key);
