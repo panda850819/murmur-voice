@@ -1,8 +1,8 @@
+use futures_util::StreamExt;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "windows")]
 use std::sync::Once;
 use thiserror::Error;
-use futures_util::StreamExt;
 use tokio::io::AsyncWriteExt;
 
 #[derive(Debug, Clone)]
@@ -15,7 +15,9 @@ pub struct ModelConfig {
 impl Default for ModelConfig {
     fn default() -> Self {
         Self {
-            url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin".to_string(),
+            url:
+                "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin"
+                    .to_string(),
             filename: "ggml-large-v3-turbo.bin".to_string(),
             expected_size: 1_624_555_275,
         }
@@ -77,15 +79,13 @@ fn migrate_model_from_old_path(base: &Path, filename: &str) {
         return; // already at correct location
     }
 
-    let old_path = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .map(|h| {
-            h.join("Library")
-                .join("Application Support")
-                .join("com.murmur.voice")
-                .join("models")
-                .join(filename)
-        });
+    let old_path = std::env::var_os("HOME").map(PathBuf::from).map(|h| {
+        h.join("Library")
+            .join("Application Support")
+            .join("com.murmur.voice")
+            .join("models")
+            .join(filename)
+    });
 
     if let Some(old) = old_path {
         if old.exists() {
@@ -133,9 +133,7 @@ where
         .await
         .map_err(|e| ModelError::Download(e.to_string()))?;
 
-    let total_size = response
-        .content_length()
-        .unwrap_or(config.expected_size);
+    let total_size = response.content_length().unwrap_or(config.expected_size);
 
     let mut file = tokio::fs::File::create(&path).await?;
     let stream = response.bytes_stream();
@@ -180,7 +178,8 @@ where
         writer.write_all(data).await?;
         downloaded += data.len() as u64;
 
-        if downloaded == total_size || downloaded.saturating_sub(last_reported) >= REPORT_THRESHOLD {
+        if downloaded == total_size || downloaded.saturating_sub(last_reported) >= REPORT_THRESHOLD
+        {
             progress_callback(downloaded, total_size);
             last_reported = downloaded;
         }
@@ -222,6 +221,9 @@ mod tests {
         // 1. At 1.0MB (chunk 10) -> Call 1
         // 2. At 2.0MB (chunk 20) -> Call 2
         // 3. At 2.5MB (chunk 25/End) -> Call 3 (Total size reached)
-        assert_eq!(count, 3, "Callback should be called exactly 3 times (1MB, 2MB, End)");
+        assert_eq!(
+            count, 3,
+            "Callback should be called exactly 3 times (1MB, 2MB, End)"
+        );
     }
 }

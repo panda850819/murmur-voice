@@ -1,6 +1,4 @@
 use serde::{Deserialize, Serialize};
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 fn default_true() -> bool {
@@ -120,7 +118,8 @@ impl Settings {
             self.hotkey_dictation = self.ptt_key.clone();
         }
         // translate_hotkey → hotkey_translate
-        if !self.translate_hotkey.is_empty() && self.hotkey_translate == default_hotkey_translate() {
+        if !self.translate_hotkey.is_empty() && self.hotkey_translate == default_hotkey_translate()
+        {
             self.hotkey_translate = self.translate_hotkey.clone();
         }
     }
@@ -175,6 +174,11 @@ fn combine_modifier_masks(modifiers: &[&str]) -> u64 {
         modifiers.iter().enumerate().fold(0u64, |acc, (i, &m)| {
             acc | (modifier_mask_for(m) << (i * 16))
         })
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = modifiers;
+        0
     }
 }
 
@@ -430,11 +434,19 @@ pub(crate) fn save_settings(settings: &Settings, base: &Path) -> Result<(), Stri
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| e.to_string())?;
+
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
 
     #[cfg(unix)]
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
-        .map_err(|e| e.to_string())?;
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+
+    use std::io::Write;
+    let mut file = options.open(&path).map_err(|e| e.to_string())?;
+    file.write_all(json.as_bytes()).map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -539,7 +551,7 @@ mod tests {
         };
         let t = s.ptt_key_target();
         assert_eq!(t.modifier_mask, 0x20); // NX_DEVICELALTKEYMASK
-        assert_eq!(t.regular_key, 0x06);  // CGKeyCode for Z
+        assert_eq!(t.regular_key, 0x06); // CGKeyCode for Z
     }
 
     #[test]
@@ -563,7 +575,7 @@ mod tests {
         };
         let t = s.ptt_key_target();
         assert_eq!(t.modifier_mask, 0xA4); // VK_LMENU
-        assert_eq!(t.regular_key, 0x5A);   // VK_Z
+        assert_eq!(t.regular_key, 0x5A); // VK_Z
     }
 
     #[test]
@@ -583,7 +595,10 @@ mod tests {
             dictionary: "".to_string(),
             ..Settings::default()
         };
-        assert_eq!(s.whisper_initial_prompt(), "繁體中文語音轉錄，使用台灣正體中文。");
+        assert_eq!(
+            s.whisper_initial_prompt(),
+            "繁體中文語音轉錄，使用台灣正體中文。"
+        );
     }
 
     #[test]
@@ -593,7 +608,10 @@ mod tests {
             dictionary: "".to_string(),
             ..Settings::default()
         };
-        assert_eq!(s.whisper_initial_prompt(), "繁體中文語音轉錄，使用台灣正體中文。");
+        assert_eq!(
+            s.whisper_initial_prompt(),
+            "繁體中文語音轉錄，使用台灣正體中文。"
+        );
     }
 
     #[test]
@@ -623,7 +641,10 @@ mod tests {
             dictionary: "Hello World".to_string(),
             ..Settings::default()
         };
-        assert_eq!(s.whisper_initial_prompt(), "Hello World 繁體中文語音轉錄，使用台灣正體中文。");
+        assert_eq!(
+            s.whisper_initial_prompt(),
+            "Hello World 繁體中文語音轉錄，使用台灣正體中文。"
+        );
     }
 
     #[test]
