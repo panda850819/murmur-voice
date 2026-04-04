@@ -19,6 +19,8 @@ let originalText = "";
 let addedWords = new Set();
 let dismissedWords = new Set();
 let debounceTimer = null;
+let lastOriginalText = null;
+let cachedOrigSet = null;
 
 function setHeader(text, processing) {
   const el = headerText();
@@ -95,10 +97,15 @@ function tokenize(text) {
   return text.split(/\s+/).filter(Boolean);
 }
 
+// ⚡ Bolt: Cache tokenized original text to prevent redundant Set allocations during rapid re-edits.
+// Calling .toLowerCase() on the original string before tokenization avoids creating intermediate map arrays.
 function wordDiff(original, edited) {
-  const origSet = new Set(tokenize(original).map((w) => w.toLowerCase()));
+  if (original !== lastOriginalText) {
+    lastOriginalText = original;
+    cachedOrigSet = new Set(tokenize(original.toLowerCase()));
+  }
   const editWords = tokenize(edited);
-  return editWords.filter((w) => !origSet.has(w.toLowerCase()) && w.length >= 2);
+  return editWords.filter((w) => !cachedOrigSet.has(w.toLowerCase()) && w.length >= 2);
 }
 
 function detectNewWords() {
