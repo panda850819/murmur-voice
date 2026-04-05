@@ -1,6 +1,4 @@
 use serde::{Deserialize, Serialize};
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 fn default_true() -> bool {
