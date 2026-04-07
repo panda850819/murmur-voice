@@ -95,10 +95,20 @@ function tokenize(text) {
   return text.split(/\s+/).filter(Boolean);
 }
 
+// Cache for the original text's token set to avoid re-tokenization during real-time typing
+let lastOriginalText = null;
+let cachedOrigSet = null;
+
 function wordDiff(original, edited) {
-  const origSet = new Set(tokenize(original).map((w) => w.toLowerCase()));
+  // Performance: Cache the original text token set because wordDiff is called
+  // frequently (on every input event after a debounce). Also, apply toLowerCase()
+  // before tokenization to avoid creating intermediate arrays with .map().
+  if (original !== lastOriginalText) {
+    cachedOrigSet = new Set(tokenize(original.toLowerCase()));
+    lastOriginalText = original;
+  }
   const editWords = tokenize(edited);
-  return editWords.filter((w) => !origSet.has(w.toLowerCase()) && w.length >= 2);
+  return editWords.filter((w) => !cachedOrigSet.has(w.toLowerCase()) && w.length >= 2);
 }
 
 function detectNewWords() {
