@@ -425,16 +425,25 @@ pub(crate) fn load_settings(base: &Path) -> Settings {
 }
 
 pub(crate) fn save_settings(settings: &Settings, base: &Path) -> Result<(), String> {
+    use std::io::Write;
     let path = settings_path(base);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| e.to_string())?;
+
+    // Fix: Prevent TOCTOU vulnerability by using OpenOptions to atomically create the file with restricted permissions.
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
 
     #[cfg(unix)]
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
-        .map_err(|e| e.to_string())?;
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+
+    let mut file = options.open(&path).map_err(|e| e.to_string())?;
+    file.write_all(json.as_bytes()).map_err(|e| e.to_string())?;
 
     Ok(())
 }
