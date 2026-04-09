@@ -20,6 +20,11 @@ let addedWords = new Set();
 let dismissedWords = new Set();
 let debounceTimer = null;
 
+// ⚡ Bolt: Cache original tokenized set to avoid redundant Set allocation
+// and tokenization per keystroke in wordDiff
+let lastOriginalText = null;
+let cachedOrigSet = null;
+
 function setHeader(text, processing) {
   const el = headerText();
   if (dotsInterval) {
@@ -96,9 +101,14 @@ function tokenize(text) {
 }
 
 function wordDiff(original, edited) {
-  const origSet = new Set(tokenize(original).map((w) => w.toLowerCase()));
+  if (original !== lastOriginalText) {
+    // ⚡ Bolt: Cache origSet and apply bulk toLowerCase prior to tokenization
+    // to avoid mapping over intermediate arrays and redundant Set construction
+    cachedOrigSet = new Set(tokenize(original.toLowerCase()));
+    lastOriginalText = original;
+  }
   const editWords = tokenize(edited);
-  return editWords.filter((w) => !origSet.has(w.toLowerCase()) && w.length >= 2);
+  return editWords.filter((w) => !cachedOrigSet.has(w.toLowerCase()) && w.length >= 2);
 }
 
 function detectNewWords() {
@@ -188,6 +198,8 @@ function reset() {
   originalText = "";
   addedWords.clear();
   dismissedWords.clear();
+  lastOriginalText = null;
+  cachedOrigSet = null;
   if (debounceTimer) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
