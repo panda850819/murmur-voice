@@ -95,10 +95,19 @@ function tokenize(text) {
   return text.split(/\s+/).filter(Boolean);
 }
 
+// Optimization: Cache module-level variables to prevent redundant tokenization
+// and Set construction for the original text during high-frequency edits
+let lastOriginalText = null;
+let cachedOrigSet = null;
+
 function wordDiff(original, edited) {
-  const origSet = new Set(tokenize(original).map((w) => w.toLowerCase()));
+  if (original !== lastOriginalText) {
+    lastOriginalText = original;
+    // Bulk apply toLowerCase() before tokenization to avoid mapping over intermediate arrays
+    cachedOrigSet = new Set(tokenize(original.toLowerCase()));
+  }
   const editWords = tokenize(edited);
-  return editWords.filter((w) => !origSet.has(w.toLowerCase()) && w.length >= 2);
+  return editWords.filter((w) => !cachedOrigSet.has(w.toLowerCase()) && w.length >= 2);
 }
 
 function detectNewWords() {
@@ -188,6 +197,8 @@ function reset() {
   originalText = "";
   addedWords.clear();
   dismissedWords.clear();
+  lastOriginalText = null;
+  cachedOrigSet = null;
   if (debounceTimer) {
     clearTimeout(debounceTimer);
     debounceTimer = null;
