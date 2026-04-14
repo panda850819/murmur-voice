@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 fn default_true() -> bool {
@@ -430,8 +430,36 @@ pub(crate) fn save_settings(settings: &Settings, base: &Path) -> Result<(), Stri
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| e.to_string())?;
 
+    // Write to a temporary file atomically using strict permissions on Unix
+    let tmp_path = path.with_extension("json.tmp");
+
+    #[cfg(unix)]
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&tmp_path)
+        .map_err(|e| e.to_string())?;
+
+    #[cfg(not(unix))]
+    let mut file = std::fs::File::create(&tmp_path).map_err(|e| e.to_string())?;
+
+    use std::io::Write;
+    file.write_all(json.as_bytes()).map_err(|e| e.to_string())?;
+    file.sync_all().map_err(|e| e.to_string())?;
+
+    // Explicitly drop the file handle to allow renaming on Windows
+    drop(file);
+
+    // Atomically move the file into place
+    std::fs::rename(&tmp_path, &path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path); // Cleanup on error
+        e.to_string()
+    })?;
+
+    // Heal existing permissions if we overwrote an existing file that had wider permissions
     #[cfg(unix)]
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
         .map_err(|e| e.to_string())?;
