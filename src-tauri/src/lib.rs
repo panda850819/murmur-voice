@@ -504,7 +504,8 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
 
                     // Lock detected language for subsequent peeks to prevent flickering
                     if language == "auto" && locked_language.is_none() {
-                        let has_cjk = text.chars().any(|c| {
+                        // ⚡ Bolt: Fast-path for pure ASCII to avoid full UTF-8 decoding overhead
+                        let has_cjk = !text.is_ascii() && text.chars().any(|c| {
                             ('\u{4e00}'..='\u{9fff}').contains(&c)
                                 || ('\u{3040}'..='\u{30ff}').contains(&c)
                                 || ('\u{ac00}'..='\u{d7af}').contains(&c)
