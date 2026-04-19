@@ -100,6 +100,10 @@ fn format_command_user_message(command: &str, context: &str, context_type: &str)
 
 /// Returns true if the text contains CJK characters.
 pub(crate) fn has_cjk(text: &str) -> bool {
+    // Fast-path: avoid full UTF-8 decoding for pure ASCII/English strings
+    if text.is_ascii() {
+        return false;
+    }
     text.chars()
         .any(|c| matches!(c as u32, 0x4E00..=0x9FFF | 0x3400..=0x4DBF | 0xF900..=0xFAFF))
 }

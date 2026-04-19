@@ -504,11 +504,16 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
 
                     // Lock detected language for subsequent peeks to prevent flickering
                     if language == "auto" && locked_language.is_none() {
-                        let has_cjk = text.chars().any(|c| {
-                            ('\u{4e00}'..='\u{9fff}').contains(&c)
-                                || ('\u{3040}'..='\u{30ff}').contains(&c)
-                                || ('\u{ac00}'..='\u{d7af}').contains(&c)
-                        });
+                        // Fast-path: avoid full UTF-8 decoding for pure ASCII strings
+                        let has_cjk = if text.is_ascii() {
+                            false
+                        } else {
+                            text.chars().any(|c| {
+                                ('\u{4e00}'..='\u{9fff}').contains(&c)
+                                    || ('\u{3040}'..='\u{30ff}').contains(&c)
+                                    || ('\u{ac00}'..='\u{d7af}').contains(&c)
+                            })
+                        };
                         if has_cjk {
                             locked_language = Some("zh".to_string());
                             log::info!("live preview: locked language to zh based on CJK content");
