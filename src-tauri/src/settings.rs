@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{PermissionsExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 fn default_true() -> bool {
@@ -430,8 +430,19 @@ pub(crate) fn save_settings(settings: &Settings, base: &Path) -> Result<(), Stri
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| e.to_string())?;
 
+    // Create/open the file with strict permissions on Unix to prevent TOCTOU
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+
+    #[cfg(unix)]
+    options.mode(0o600);
+
+    std::io::Write::write_all(&mut options.open(&path).map_err(|e| e.to_string())?, json.as_bytes())
+        .map_err(|e| e.to_string())?;
+
+    // In case the file already existed with wider permissions before we truncated it,
+    // explicitly fix the permissions after writing to "heal" them.
     #[cfg(unix)]
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
         .map_err(|e| e.to_string())?;
