@@ -200,13 +200,18 @@ impl Settings {
 
     /// Apply text replacement rules to the given text.
     pub fn apply_replacements(&self, text: &str) -> String {
-        let mut result = text.to_string();
+        // Performance optimization: Avoid String allocation for each rule.
+        // We use Cow to avoid allocating unless a replacement is actually needed.
+        // A simple .contains() check is much faster than .replace() when the pattern is missing.
+        let mut result = std::borrow::Cow::Borrowed(text);
         for rule in &self.text_replacements {
             if rule.enabled && !rule.find.is_empty() {
-                result = result.replace(&rule.find, &rule.replace);
+                if result.contains(&rule.find) {
+                    result = std::borrow::Cow::Owned(result.replace(&rule.find, &rule.replace));
+                }
             }
         }
-        result
+        result.into_owned()
     }
 
     /// Returns the whisper language code.
