@@ -205,10 +205,8 @@ impl Settings {
         // A simple .contains() check is much faster than .replace() when the pattern is missing.
         let mut result = std::borrow::Cow::Borrowed(text);
         for rule in &self.text_replacements {
-            if rule.enabled && !rule.find.is_empty() {
-                if result.contains(&rule.find) {
-                    result = std::borrow::Cow::Owned(result.replace(&rule.find, &rule.replace));
-                }
+            if rule.enabled && !rule.find.is_empty() && result.contains(&rule.find) {
+                result = std::borrow::Cow::Owned(result.replace(&rule.find, &rule.replace));
             }
         }
         result.into_owned()
