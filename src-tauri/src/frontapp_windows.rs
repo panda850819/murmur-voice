@@ -1,6 +1,9 @@
 use windows::core::PWSTR;
 use windows::Win32::Foundation::CloseHandle;
-use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED};
+use windows::Win32::System::Com::{
+    CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
+    COINIT_APARTMENTTHREADED,
+};
 use windows::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
 };
@@ -30,7 +33,12 @@ pub(crate) fn foreground_app_bundle_id() -> Option<String> {
 
         let mut buf = [0u16; 1024];
         let mut len = buf.len() as u32;
-        let ok = QueryFullProcessImageNameW(process, PROCESS_NAME_FORMAT(0), PWSTR(buf.as_mut_ptr()), &mut len);
+        let ok = QueryFullProcessImageNameW(
+            process,
+            PROCESS_NAME_FORMAT(0),
+            PWSTR(buf.as_mut_ptr()),
+            &mut len,
+        );
         let _ = CloseHandle(process);
 
         if ok.is_err() {
@@ -39,10 +47,7 @@ pub(crate) fn foreground_app_bundle_id() -> Option<String> {
 
         let full_path = String::from_utf16_lossy(&buf[..len as usize]);
         // Extract just the filename from the full path
-        full_path
-            .rsplit('\\')
-            .next()
-            .map(|s| s.to_string())
+        full_path.rsplit('\\').next().map(|s| s.to_string())
     }
 }
 
@@ -85,9 +90,17 @@ pub(crate) fn style_for_app(exe_name: &str) -> &'static str {
         | "ms-teams.exe" => "casual",
 
         // Code editors / terminals
-        "code.exe" | "devenv.exe" | "idea64.exe" | "idea.exe" | "cursor.exe"
-        | "sublime_text.exe" | "windowsterminal.exe" | "wt.exe" | "cmd.exe"
-        | "powershell.exe" | "pwsh.exe" => "technical",
+        "code.exe"
+        | "devenv.exe"
+        | "idea64.exe"
+        | "idea.exe"
+        | "cursor.exe"
+        | "sublime_text.exe"
+        | "windowsterminal.exe"
+        | "wt.exe"
+        | "cmd.exe"
+        | "powershell.exe"
+        | "pwsh.exe" => "technical",
 
         _ => "default",
     }
