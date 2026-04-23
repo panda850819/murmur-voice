@@ -88,12 +88,7 @@ impl TranscriptionEngine {
         Ok(())
     }
 
-    pub(crate) fn transcribe(
-        &self,
-        samples: &[f32],
-        language: &str,
-        initial_prompt: &str,
-    ) -> Result<String, WhisperError> {
+    pub(crate) fn transcribe(&self, samples: &[f32], language: &str, initial_prompt: &str) -> Result<String, WhisperError> {
         if !audio::is_audio_usable(samples) {
             return Ok(String::new());
         }
@@ -115,7 +110,7 @@ impl TranscriptionEngine {
         params.set_suppress_blank(true);
         params.set_no_speech_thold(NO_SPEECH_THRESHOLD);
         params.set_temperature_inc(0.0); // disable temperature fallback — it just produces more hallucinations
-        params.set_entropy_thold(2.4); // reject segments with high entropy (uncertain/hallucinated)
+        params.set_entropy_thold(2.4);   // reject segments with high entropy (uncertain/hallucinated)
 
         if !initial_prompt.is_empty() {
             params.set_initial_prompt(initial_prompt);
@@ -147,9 +142,11 @@ impl TranscriptionEngine {
                     }
                 }
 
-                let segment_text = segment.to_str().map_err(|e: whisper_rs::WhisperError| {
-                    WhisperError::Transcription(e.to_string())
-                })?;
+                let segment_text = segment
+                    .to_str()
+                    .map_err(|e: whisper_rs::WhisperError| {
+                        WhisperError::Transcription(e.to_string())
+                    })?;
                 text.push_str(segment_text);
             }
         }
@@ -209,8 +206,7 @@ fn is_hallucination(text: &str) -> bool {
         return false;
     }
     let lower = text.to_lowercase();
-    let trimmed =
-        lower.trim_matches(|c: char| c.is_whitespace() || c == '.' || c == '!' || c == ',');
+    let trimmed = lower.trim_matches(|c: char| c.is_whitespace() || c == '.' || c == '!' || c == ',');
     // Reject if only punctuation/whitespace remains after trimming
     if trimmed.is_empty() || trimmed.chars().all(|c| !c.is_alphanumeric()) {
         return true;

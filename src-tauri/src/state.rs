@@ -247,23 +247,14 @@ mod tests {
     fn test_recording_mode_event_mode_str() {
         assert_eq!(RecordingMode::Dictation.event_mode_str(), "dictated");
         assert_eq!(RecordingMode::Translate.event_mode_str(), "translated");
-        assert_eq!(
-            RecordingMode::VoiceCommand.event_mode_str(),
-            "voice_command"
-        );
-        assert_eq!(
-            RecordingMode::ClipboardRewrite.event_mode_str(),
-            "clipboard_rewrite"
-        );
+        assert_eq!(RecordingMode::VoiceCommand.event_mode_str(), "voice_command");
+        assert_eq!(RecordingMode::ClipboardRewrite.event_mode_str(), "clipboard_rewrite");
     }
 
     #[test]
     fn test_recording_mode_context_type() {
         assert_eq!(RecordingMode::VoiceCommand.context_type(), "Selected text");
-        assert_eq!(
-            RecordingMode::ClipboardRewrite.context_type(),
-            "Clipboard content"
-        );
+        assert_eq!(RecordingMode::ClipboardRewrite.context_type(), "Clipboard content");
         assert_eq!(RecordingMode::Dictation.context_type(), "");
         assert_eq!(RecordingMode::Translate.context_type(), "");
     }

@@ -197,11 +197,7 @@ const MODIFIER_CONFLICT_WINDOW: std::time::Duration = std::time::Duration::from_
 fn emit_mode_info(app: &tauri::AppHandle, mode: state::RecordingMode, llm_enabled: bool) {
     let mode_str = match mode {
         state::RecordingMode::Dictation => {
-            if llm_enabled {
-                "dictation_llm"
-            } else {
-                "dictation"
-            }
+            if llm_enabled { "dictation_llm" } else { "dictation" }
         }
         state::RecordingMode::VoiceCommand => "voice_command",
         state::RecordingMode::ClipboardRewrite => "clipboard_rewrite",
@@ -221,24 +217,20 @@ fn do_translate(app: &tauri::AppHandle) -> Result<(), String> {
     clipboard::copy_selection().map_err(|e| format!("Failed to copy selection: {e}"))?;
 
     // 4. Read clipboard
-    let text = clipboard::read_text().map_err(|e| format!("Failed to read clipboard: {e}"))?;
+    let text = clipboard::read_text()
+        .map_err(|e| format!("Failed to read clipboard: {e}"))?;
     if text.trim().is_empty() {
         return Err("No text selected".to_string());
     }
 
     // 5. Get translator (bypasses llm_enabled check)
-    let settings = state
-        .settings
-        .lock()
-        .map_err(|e| format!("settings mutex poisoned: {e}"))?
-        .clone();
+    let settings = state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?.clone();
     let translator = llm::create_translator(&settings)
         .ok_or("Enable AI Processing provider in Settings to use translation")?;
 
     // 6. Translate via LLM (auto-detect direction)
     let target = llm::detect_target_language(&text);
-    let translated = translator
-        .translate(&text, target)
+    let translated = translator.translate(&text, target)
         .map_err(|e| e.to_string())?;
 
     // 7. Write to clipboard and paste (clipboard retains translated text)
@@ -274,20 +266,14 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
     match mode {
         state::RecordingMode::VoiceCommand => {
             // Check LLM is enabled
-            let llm_enabled = state
-                .settings
-                .lock()
-                .map(|s| s.llm_enabled)
-                .unwrap_or(false);
+            let llm_enabled = state.settings.lock().map(|s| s.llm_enabled).unwrap_or(false);
             if !llm_enabled {
-                return Err(
-                    "Enable AI Processing in Settings to use Voice Command mode".to_string()
-                );
+                return Err("Enable AI Processing in Settings to use Voice Command mode".to_string());
             }
             // Copy selection to get context
             clipboard::copy_selection().map_err(|e| format!("Failed to copy selection: {e}"))?;
-            let text =
-                clipboard::read_text().map_err(|e| format!("Failed to read clipboard: {e}"))?;
+            let text = clipboard::read_text()
+                .map_err(|e| format!("Failed to read clipboard: {e}"))?;
             if text.trim().is_empty() {
                 return Err("No text selected".to_string());
             }
@@ -297,19 +283,13 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
         }
         state::RecordingMode::ClipboardRewrite => {
             // Check LLM is enabled
-            let llm_enabled = state
-                .settings
-                .lock()
-                .map(|s| s.llm_enabled)
-                .unwrap_or(false);
+            let llm_enabled = state.settings.lock().map(|s| s.llm_enabled).unwrap_or(false);
             if !llm_enabled {
-                return Err(
-                    "Enable AI Processing in Settings to use Clipboard Rewrite mode".to_string(),
-                );
+                return Err("Enable AI Processing in Settings to use Clipboard Rewrite mode".to_string());
             }
             // Read clipboard content
-            let text =
-                clipboard::read_text().map_err(|e| format!("Failed to read clipboard: {e}"))?;
+            let text = clipboard::read_text()
+                .map_err(|e| format!("Failed to read clipboard: {e}"))?;
             if text.trim().is_empty() {
                 return Err("Clipboard is empty".to_string());
             }
@@ -326,11 +306,7 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
     }
 
     // If local engine and model not downloaded, trigger download instead of recording
-    let is_local = state
-        .settings
-        .lock()
-        .map(|s| s.engine != "groq")
-        .unwrap_or(true);
+    let is_local = state.settings.lock().map(|s| s.engine != "groq").unwrap_or(true);
     if is_local && !model::is_model_ready(&state.app_data_dir, &model::ModelConfig::default()) {
         log::info!("model not ready, triggering download");
         show_main_window(app);
@@ -351,19 +327,12 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
             };
             let config = model::ModelConfig::default();
             let app_progress = app_clone.clone();
-            let result = rt.block_on(model::download_model(
-                &base,
-                &config,
-                move |downloaded, total| {
-                    let _ = app_progress.emit(
-                        events::MODEL_DOWNLOAD_PROGRESS,
-                        serde_json::json!({
-                            "downloaded": downloaded,
-                            "total": total,
-                        }),
-                    );
-                },
-            ));
+            let result = rt.block_on(model::download_model(&base, &config, move |downloaded, total| {
+                let _ = app_progress.emit(events::MODEL_DOWNLOAD_PROGRESS, serde_json::json!({
+                    "downloaded": downloaded,
+                    "total": total,
+                }));
+            }));
             match result {
                 Ok(()) => {
                     let _ = app_clone.emit(events::MODEL_READY, ());
@@ -394,11 +363,7 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
     // mode handles live transcription display. Preview appears on result.
 
     // Emit mode info for main bar display
-    let llm_enabled = state
-        .settings
-        .lock()
-        .map(|s| s.llm_enabled)
-        .unwrap_or(false);
+    let llm_enabled = state.settings.lock().map(|s| s.llm_enabled).unwrap_or(false);
     emit_mode_info(app, mode, llm_enabled);
 
     state
@@ -423,7 +388,9 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
         .map_err(|e| format!("recorder mutex poisoned: {e}"))?;
     *recorder_lock = Some(recorder);
 
-    let _ = state.app_state.transition(state::RecordingState::Recording);
+    let _ = state
+        .app_state
+        .transition(state::RecordingState::Recording);
     let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_RECORDING);
 
     // Auto-stop after 5 minutes in toggle mode
@@ -517,9 +484,7 @@ fn do_start_recording(app: &tauri::AppHandle, mode: state::RecordingMode) -> Res
                         }
                     };
                     match engine_lock.as_ref() {
-                        Some(engine) => engine
-                            .transcribe(preview_samples, effective_language, &initial_prompt)
-                            .unwrap_or_default(),
+                        Some(engine) => engine.transcribe(preview_samples, effective_language, &initial_prompt).unwrap_or_default(),
                         None => {
                             // Engine not ready yet — wait and retry on next loop iteration
                             drop(engine_lock);
@@ -605,9 +570,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
     let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_TRANSCRIBING);
 
     // Read active mode
-    let active_mode = state
-        .active_mode
-        .lock()
+    let active_mode = state.active_mode.lock()
         .map(|m| *m)
         .unwrap_or(state::RecordingMode::Dictation);
 
@@ -621,12 +584,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         if app_aware {
             let (name, style) = frontapp::foreground_app_bundle_id()
                 .as_deref()
-                .map(|bid| {
-                    (
-                        frontapp::display_name_for_app(bid),
-                        frontapp::style_for_app(bid),
-                    )
-                })
+                .map(|bid| (frontapp::display_name_for_app(bid), frontapp::style_for_app(bid)))
                 .unwrap_or(("Unknown", "default"));
             let _ = app.emit(
                 events::FOREGROUND_APP_INFO,
@@ -638,22 +596,13 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
     let (engine_type, language, initial_prompt, api_key_for_whisper) = state
         .settings
         .lock()
-        .map(|s| {
-            (
-                s.engine.clone(),
-                s.whisper_language().to_string(),
-                s.whisper_initial_prompt(),
-                s.groq_api_key.clone(),
-            )
-        })
-        .unwrap_or_else(|_| {
-            (
-                "local".to_string(),
-                "auto".to_string(),
-                String::new(),
-                String::new(),
-            )
-        });
+        .map(|s| (
+            s.engine.clone(),
+            s.whisper_language().to_string(),
+            s.whisper_initial_prompt(),
+            s.groq_api_key.clone(),
+        ))
+        .unwrap_or_else(|_| ("local".to_string(), "auto".to_string(), String::new(), String::new()));
 
     // Anti-hallucination: skip if audio is too short or silent (applies to all engines)
     if !audio::is_audio_usable(&samples) {
@@ -697,14 +646,11 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
             .lock()
             .map_err(|e| format!("engine mutex poisoned: {e}"))?;
         match engine_lock.as_ref() {
-            Some(engine) => engine
-                .transcribe(&samples, &language, &initial_prompt)
-                .map_err(|e| e.to_string())?,
+            Some(engine) => engine.transcribe(&samples, &language, &initial_prompt).map_err(|e| e.to_string())?,
             None => {
                 // Engine not available — retry init synchronously (task 4.4)
                 drop(engine_lock);
-                let model_path =
-                    model::model_path(&state.app_data_dir, &model::ModelConfig::default().filename);
+                let model_path = model::model_path(&state.app_data_dir, &model::ModelConfig::default().filename);
                 let model_path_str = model_path
                     .to_str()
                     .ok_or("model path contains invalid UTF-8")?;
@@ -742,11 +688,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
                     .settings
                     .lock()
                     .map_err(|e| format!("settings mutex poisoned: {e}"))?;
-                (
-                    llm::create_enhancer(&s),
-                    s.app_aware_style,
-                    s.apply_replacements(&raw_text),
-                )
+                (llm::create_enhancer(&s), s.app_aware_style, s.apply_replacements(&raw_text))
             };
 
             if let Some(enhancer) = enhancer {
@@ -796,9 +738,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
         }
         state::RecordingMode::VoiceCommand | state::RecordingMode::ClipboardRewrite => {
             // Voice command flow: skip text_replacement, require LLM
-            let context = state
-                .captured_context
-                .lock()
+            let context = state.captured_context.lock()
                 .ok()
                 .and_then(|mut ctx| ctx.take())
                 .unwrap_or_default();
@@ -808,15 +748,11 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
                 return Ok(String::new());
             }
 
-            let _ = state
-                .app_state
-                .transition(state::RecordingState::Processing);
+            let _ = state.app_state.transition(state::RecordingState::Processing);
             let _ = app.emit(events::RECORDING_STATE_CHANGED, events::STATE_PROCESSING);
 
             let enhancer = {
-                let s = state
-                    .settings
-                    .lock()
+                let s = state.settings.lock()
                     .map_err(|e| format!("settings mutex poisoned: {e}"))?;
                 llm::create_enhancer(&s)
             };
@@ -839,10 +775,7 @@ fn do_stop_recording(app: &tauri::AppHandle) -> Result<String, String> {
                         }
                         Err(e) => {
                             log::error!("LLM execute_command failed: {}", e);
-                            let _ = app.emit(
-                                events::RECORDING_ERROR,
-                                format!("LLM processing failed: {e}"),
-                            );
+                            let _ = app.emit(events::RECORDING_ERROR, format!("LLM processing failed: {e}"));
                             return Err(e.to_string());
                         }
                     }
@@ -950,10 +883,7 @@ async fn check_for_updates() -> Result<UpdateCheckResult, String> {
         .await
         .map_err(|e| format!("request failed: {e}"))?;
 
-    let json: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("parse failed: {e}"))?;
+    let json: serde_json::Value = resp.json().await.map_err(|e| format!("parse failed: {e}"))?;
     let tag = json["tag_name"].as_str().unwrap_or("unknown");
     let latest = tag.trim_start_matches('v');
     let url = json["html_url"]
@@ -1027,19 +957,15 @@ async fn download_model_cmd(app: tauri::AppHandle) -> Result<(), String> {
     let base = murmur_state.app_data_dir.clone();
 
     let app_clone = app.clone();
-    let result = model::download_model(
-        &base,
-        &model::ModelConfig::default(),
-        move |downloaded, total| {
-            let _ = app_clone.emit(
-                events::MODEL_DOWNLOAD_PROGRESS,
-                serde_json::json!({
-                    "downloaded": downloaded,
-                    "total": total,
-                }),
-            );
-        },
-    )
+    let result = model::download_model(&base, &model::ModelConfig::default(), move |downloaded, total| {
+        let _ = app_clone.emit(
+            events::MODEL_DOWNLOAD_PROGRESS,
+            serde_json::json!({
+                "downloaded": downloaded,
+                "total": total,
+            }),
+        );
+    })
     .await;
 
     result.map_err(|e| {
@@ -1072,7 +998,11 @@ fn stop_recording(app: tauri::AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 fn get_settings(state: tauri::State<'_, MurmurState>) -> settings::Settings {
-    state.settings.lock().map(|s| s.clone()).unwrap_or_default()
+    state
+        .settings
+        .lock()
+        .map(|s| s.clone())
+        .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -1083,33 +1013,17 @@ fn save_settings(
 ) -> Result<(), String> {
     // Apply all hotkey changes
     let dict_t = new_settings.ptt_key_target();
-    hotkey::set_hotkey(
-        state::RecordingMode::Dictation,
-        dict_t.modifier_mask,
-        dict_t.regular_key,
-    );
+    hotkey::set_hotkey(state::RecordingMode::Dictation, dict_t.modifier_mask, dict_t.regular_key);
 
     let tr = new_settings.translate_key_target();
-    hotkey::set_hotkey(
-        state::RecordingMode::Translate,
-        tr.modifier_mask,
-        tr.regular_key,
-    );
+    hotkey::set_hotkey(state::RecordingMode::Translate, tr.modifier_mask, tr.regular_key);
 
     // Set VoiceCommand and ClipboardRewrite hotkeys
     let vc = new_settings.voice_command_key_target();
-    hotkey::set_hotkey(
-        state::RecordingMode::VoiceCommand,
-        vc.modifier_mask,
-        vc.regular_key,
-    );
+    hotkey::set_hotkey(state::RecordingMode::VoiceCommand, vc.modifier_mask, vc.regular_key);
 
     let cr = new_settings.clipboard_rewrite_key_target();
-    hotkey::set_hotkey(
-        state::RecordingMode::ClipboardRewrite,
-        cr.modifier_mask,
-        cr.regular_key,
-    );
+    hotkey::set_hotkey(state::RecordingMode::ClipboardRewrite, cr.modifier_mask, cr.regular_key);
 
     // Apply window opacity
     if let Some(window) = app.get_webview_window("main") {
@@ -1121,10 +1035,7 @@ fn save_settings(
     settings::save_settings(&new_settings, &state.app_data_dir)?;
 
     let engine_changed = {
-        let mut s = state
-            .settings
-            .lock()
-            .map_err(|e| format!("settings mutex poisoned: {e}"))?;
+        let mut s = state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?;
         let changed = s.engine != new_settings.engine;
         *s = new_settings;
         changed
@@ -1132,12 +1043,7 @@ fn save_settings(
 
     // Handle engine lifecycle on switch
     if engine_changed {
-        let new_engine = &state
-            .settings
-            .lock()
-            .map_err(|e| format!("settings mutex poisoned: {e}"))?
-            .engine
-            .clone();
+        let new_engine = &state.settings.lock().map_err(|e| format!("settings mutex poisoned: {e}"))?.engine.clone();
         if new_engine == "groq" {
             // Unload whisper engine (frees ~2GB of memory)
             if let Ok(mut lock) = state.engine.lock() {
@@ -1205,9 +1111,7 @@ fn translate_text(text: String, app: tauri::AppHandle) -> Result<String, String>
     let translator = llm::create_translator(&settings)
         .ok_or("Enable AI Processing provider in Settings to use translation")?;
     let target = llm::detect_target_language(&text);
-    let translated = translator
-        .translate(&text, target)
-        .map_err(|e| e.to_string())?;
+    let translated = translator.translate(&text, target).map_err(|e| e.to_string())?;
     clipboard::copy_only(&translated).map_err(|e| e.to_string())?;
     Ok(translated)
 }
@@ -1236,11 +1140,7 @@ fn pause_hotkey_listener() {
 fn resume_hotkey_listener(state: tauri::State<'_, MurmurState>) {
     if let Ok(s) = state.settings.lock() {
         let t = s.ptt_key_target();
-        hotkey::set_hotkey(
-            state::RecordingMode::Dictation,
-            t.modifier_mask,
-            t.regular_key,
-        );
+        hotkey::set_hotkey(state::RecordingMode::Dictation, t.modifier_mask, t.regular_key);
     }
 }
 
@@ -1253,16 +1153,15 @@ fn pause_translate_hotkey() {
 fn resume_translate_hotkey(state: tauri::State<'_, MurmurState>) {
     if let Ok(s) = state.settings.lock() {
         let t = s.translate_key_target();
-        hotkey::set_hotkey(
-            state::RecordingMode::Translate,
-            t.modifier_mask,
-            t.regular_key,
-        );
+        hotkey::set_hotkey(state::RecordingMode::Translate, t.modifier_mask, t.regular_key);
     }
 }
 
 #[tauri::command]
-fn add_dictionary_term(term: String, state: tauri::State<'_, MurmurState>) -> Result<(), String> {
+fn add_dictionary_term(
+    term: String,
+    state: tauri::State<'_, MurmurState>,
+) -> Result<(), String> {
     let trimmed = term.trim();
     if trimmed.is_empty() {
         return Ok(());
@@ -1306,8 +1205,10 @@ fn add_dictionary_terms(
             .filter(|t| !t.is_empty())
             .collect();
 
-        let mut existing_set: std::collections::HashSet<String> =
-            existing_vec.iter().map(|t| t.to_lowercase()).collect();
+        let mut existing_set: std::collections::HashSet<String> = existing_vec
+            .iter()
+            .map(|t| t.to_lowercase())
+            .collect();
 
         let mut added = false;
         for term in terms {
@@ -1355,7 +1256,8 @@ pub fn run() {
     env_logger::init();
 
     #[allow(unused_mut)]
-    let mut builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+    let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init());
 
     #[cfg(target_os = "macos")]
     {
@@ -1392,9 +1294,7 @@ pub fn run() {
         ])
         .setup(|app| {
             // Resolve app data directory from Tauri
-            let app_data_dir = app
-                .path()
-                .app_data_dir()
+            let app_data_dir = app.path().app_data_dir()
                 .map_err(|e| format!("failed to resolve app data dir: {e}"))?;
 
             // Load settings from the resolved path
@@ -1407,29 +1307,13 @@ pub fn run() {
 
             // Set all hotkey slots
             let t = initial_settings.ptt_key_target();
-            hotkey::set_hotkey(
-                state::RecordingMode::Dictation,
-                t.modifier_mask,
-                t.regular_key,
-            );
+            hotkey::set_hotkey(state::RecordingMode::Dictation, t.modifier_mask, t.regular_key);
             let tr = initial_settings.translate_key_target();
-            hotkey::set_hotkey(
-                state::RecordingMode::Translate,
-                tr.modifier_mask,
-                tr.regular_key,
-            );
+            hotkey::set_hotkey(state::RecordingMode::Translate, tr.modifier_mask, tr.regular_key);
             let vc = initial_settings.voice_command_key_target();
-            hotkey::set_hotkey(
-                state::RecordingMode::VoiceCommand,
-                vc.modifier_mask,
-                vc.regular_key,
-            );
+            hotkey::set_hotkey(state::RecordingMode::VoiceCommand, vc.modifier_mask, vc.regular_key);
             let cr = initial_settings.clipboard_rewrite_key_target();
-            hotkey::set_hotkey(
-                state::RecordingMode::ClipboardRewrite,
-                cr.modifier_mask,
-                cr.regular_key,
-            );
+            hotkey::set_hotkey(state::RecordingMode::ClipboardRewrite, cr.modifier_mask, cr.regular_key);
 
             // Register MurmurState with the resolved app_data_dir.
             // engine_init_done starts as `false` only when background engine init will run
@@ -1460,7 +1344,8 @@ pub fn run() {
                 tauri::menu::MenuItem::with_id(app, "settings", "Settings...", true, None::<&str>)?;
             let show_item =
                 tauri::menu::MenuItem::with_id(app, "show_toggle", "Show", true, None::<&str>)?;
-            let quit = tauri::menu::MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let quit =
+                tauri::menu::MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = tauri::menu::Menu::with_items(app, &[&settings_item, &show_item, &quit])?;
             let show_item_ref = show_item.clone();
             let _tray = tauri::tray::TrayIconBuilder::new()
@@ -1493,10 +1378,7 @@ pub fn run() {
             // Check onboarding status
             let needs_onboarding = {
                 let s = app.state::<MurmurState>();
-                s.settings
-                    .lock()
-                    .map(|s| !s.onboarding_complete)
-                    .unwrap_or(false)
+                s.settings.lock().map(|s| !s.onboarding_complete).unwrap_or(false)
             };
 
             if needs_onboarding {
@@ -1524,8 +1406,8 @@ pub fn run() {
             // NSWindow cannot overlay fullscreen apps regardless of level — only NSPanel can.
             #[cfg(target_os = "macos")]
             {
-                use tauri_nspanel::panel::{NSWindowCollectionBehavior, NSWindowStyleMask};
                 use tauri_nspanel::WebviewWindowExt;
+                use tauri_nspanel::panel::{NSWindowCollectionBehavior, NSWindowStyleMask};
 
                 for name in &["main", "preview"] {
                     if let Some(w) = app.get_webview_window(name) {
@@ -1535,13 +1417,10 @@ pub fn run() {
                                 panel.set_style_mask(NSWindowStyleMask::NonactivatingPanel);
                                 panel.set_collection_behavior(
                                     NSWindowCollectionBehavior::CanJoinAllSpaces
-                                        | NSWindowCollectionBehavior::Stationary
-                                        | NSWindowCollectionBehavior::FullScreenAuxiliary,
+                                    | NSWindowCollectionBehavior::Stationary
+                                    | NSWindowCollectionBehavior::FullScreenAuxiliary,
                                 );
-                                log::info!(
-                                    "converted '{}' to NSPanel for fullscreen overlay",
-                                    name
-                                );
+                                log::info!("converted '{}' to NSPanel for fullscreen overlay", name);
                             }
                             Err(e) => {
                                 log::warn!("failed to convert '{}' to NSPanel: {}", name, e);
@@ -1567,16 +1446,14 @@ pub fn run() {
                         .unwrap_or(1.0);
                     let new_y = main_pos.y as f64 - (preview_h + gap) * scale;
                     use tauri::PhysicalPosition;
-                    let _ =
-                        preview_win.set_position(PhysicalPosition::new(main_pos.x, new_y as i32));
+                    let _ = preview_win.set_position(PhysicalPosition::new(main_pos.x, new_y as i32));
                 }
             }
 
             // Load whisper engine in background thread only for local engine users.
             // Groq users don't need the local model at all — saves ~2GB of memory.
             if will_load_engine {
-                let model_path =
-                    model::model_path(&app_data_dir, &model::ModelConfig::default().filename);
+                let model_path = model::model_path(&app_data_dir, &model::ModelConfig::default().filename);
                 spawn_engine_load(app.handle().clone(), model_path, "startup");
             }
 
@@ -1628,15 +1505,16 @@ pub fn run() {
                                         continue; // genuinely busy
                                     }
 
-                                    log::info!(
-                                        "translate hotkey: cancelling modifier-conflict recording"
-                                    );
+                                    log::info!("translate hotkey: cancelling modifier-conflict recording");
                                     cancel_active_recording(&murmur_state);
                                     is_recording = false;
                                     recording_started_at = None;
                                     reset_to_idle(&murmur_state, &app_handle);
                                 }
-                                if murmur_state.translating.swap(true, Ordering::Acquire) {
+                                if murmur_state
+                                    .translating
+                                    .swap(true, Ordering::Acquire)
+                                {
                                     continue; // already in progress
                                 }
                                 let app2 = app_handle.clone();
@@ -1668,7 +1546,9 @@ pub fn run() {
                                 "toggle" => {
                                     // Debounce: skip if last toggle was < 500ms ago
                                     if let Some(last) = last_toggle {
-                                        if last.elapsed() < std::time::Duration::from_millis(500) {
+                                        if last.elapsed()
+                                            < std::time::Duration::from_millis(500)
+                                        {
                                             continue;
                                         }
                                     }
@@ -1693,7 +1573,10 @@ pub fn run() {
                                                 recording_started_at = Some(Instant::now());
                                             }
                                             Err(e) => {
-                                                log::error!("failed to start recording: {}", e);
+                                                log::error!(
+                                                    "failed to start recording: {}",
+                                                    e
+                                                );
                                                 let _ = app_handle.emit(events::RECORDING_ERROR, e);
                                             }
                                         }
@@ -1746,7 +1629,8 @@ pub fn run() {
                         }
                         hotkey::HotkeyEvent::EscCancel => {
                             let murmur_state = app_handle.state::<MurmurState>();
-                            if murmur_state.app_state.current() != state::RecordingState::Recording
+                            if murmur_state.app_state.current()
+                                != state::RecordingState::Recording
                             {
                                 continue; // Only cancel during active recording
                             }
@@ -1759,7 +1643,8 @@ pub fn run() {
 
                             // Hide windows after 2-second delay
                             let app_hide = app_handle.clone();
-                            let gen = murmur_state.preview_generation.load(Ordering::SeqCst);
+                            let gen =
+                                murmur_state.preview_generation.load(Ordering::SeqCst);
                             std::thread::spawn(move || {
                                 std::thread::sleep(std::time::Duration::from_secs(2));
                                 let ms = app_hide.state::<MurmurState>();

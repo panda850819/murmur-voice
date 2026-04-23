@@ -114,6 +114,7 @@ pub(crate) fn detect_target_language(text: &str) -> &'static str {
     }
 }
 
+
 /// Remove common preamble/prefix patterns that LLMs add despite instructions.
 fn strip_llm_prefix(text: &str) -> &str {
     let prefixes = [
@@ -177,12 +178,7 @@ pub(crate) trait TextEnhancer: Send + Sync {
     fn enhance(&self, text: &str, style: &str) -> Result<String, LlmError>;
     /// Execute a voice command on a piece of context text.
     /// Used by VoiceCommand and ClipboardRewrite modes.
-    fn execute_command(
-        &self,
-        command: &str,
-        context: &str,
-        context_type: &str,
-    ) -> Result<String, LlmError>;
+    fn execute_command(&self, command: &str, context: &str, context_type: &str) -> Result<String, LlmError>;
 }
 
 /// OpenAI-compatible LLM provider. Covers Groq, Ollama, and any custom endpoint.
@@ -227,13 +223,7 @@ impl OpenAICompatibleEnhancer {
     }
 
     /// Shared method to call the OpenAI-compatible chat completion API.
-    fn chat_completion(
-        &self,
-        system_prompt: &str,
-        user_message: &str,
-        temperature: f64,
-        max_tokens: u64,
-    ) -> Result<String, LlmError> {
+    fn chat_completion(&self, system_prompt: &str, user_message: &str, temperature: f64, max_tokens: u64) -> Result<String, LlmError> {
         let mut body = serde_json::json!({
             "model": &self.model,
             "messages": [
@@ -361,12 +351,7 @@ impl TextEnhancer for OpenAICompatibleEnhancer {
         Ok(result)
     }
 
-    fn execute_command(
-        &self,
-        command: &str,
-        context: &str,
-        context_type: &str,
-    ) -> Result<String, LlmError> {
+    fn execute_command(&self, command: &str, context: &str, context_type: &str) -> Result<String, LlmError> {
         let system_prompt = build_command_prompt();
         let user_message = format_command_user_message(command, context, context_type);
         let max_tokens = (context.len() * 4).clamp(256, 4096) as u64;
@@ -653,10 +638,7 @@ mod tests {
         assert_eq!(strip_llm_prefix("Just some text"), "Just some text");
 
         // Prefix in the middle (should not strip)
-        assert_eq!(
-            strip_llm_prefix("Note: Output: is here"),
-            "Note: Output: is here"
-        );
+        assert_eq!(strip_llm_prefix("Note: Output: is here"), "Note: Output: is here");
 
         // Multiple prefixes - should only strip one
         assert_eq!(strip_llm_prefix("Output: Cleaned: text"), "Cleaned: text");
