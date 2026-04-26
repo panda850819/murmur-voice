@@ -19,6 +19,7 @@ let originalText = "";
 let addedWords = new Set();
 let dismissedWords = new Set();
 let debounceTimer = null;
+let activeChips = [];
 
 function setHeader(text, processing) {
   const el = headerText();
@@ -119,6 +120,7 @@ function detectNewWords() {
 function showDictSuggestions(words) {
   const container = dictChips();
   while (container.firstChild) container.removeChild(container.firstChild);
+  activeChips = [];
   words.forEach((word) => {
     const chip = document.createElement("button");
     chip.className = "dict-chip";
@@ -126,6 +128,7 @@ function showDictSuggestions(words) {
     chip.title = t("preview.add");
     chip.addEventListener("click", () => addDictWord(word, chip));
     container.appendChild(chip);
+    activeChips.push(chip);
   });
   const addAllBtn = document.getElementById("dict-add-all-btn");
   addAllBtn.classList.toggle("hidden", words.length < 2);
@@ -154,7 +157,7 @@ async function addDictWord(word, chipEl) {
 }
 
 function updateDictBar() {
-  const chips = dictChips().querySelectorAll(".dict-chip:not(.added)");
+  const chips = activeChips.filter(c => !c.classList.contains("added"));
   if (chips.length === 0) {
     hideDictSuggest();
     return;
@@ -167,6 +170,7 @@ function hideDictSuggest() {
   dictSuggest().classList.add("hidden");
   const container = dictChips();
   while (container.firstChild) container.removeChild(container.firstChild);
+  activeChips = [];
 }
 
 function reset() {
@@ -260,7 +264,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Dict suggestion handlers
   document.getElementById("dict-add-all-btn").addEventListener("click", async () => {
-    const chips = Array.from(dictChips().querySelectorAll(".dict-chip:not(.added)"));
+    const chips = activeChips.filter(c => !c.classList.contains("added"));
     const words = chips.map((chip) => {
       let w = chip.textContent;
       if (w.startsWith("+ ")) w = w.substring(2);
@@ -279,7 +283,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   document.getElementById("dict-dismiss-btn").addEventListener("click", () => {
-    const chips = dictChips().querySelectorAll(".dict-chip:not(.added)");
+    const chips = activeChips.filter(c => !c.classList.contains("added"));
     chips.forEach((chip) => dismissedWords.add(chip.textContent.toLowerCase()));
     hideDictSuggest();
   });
