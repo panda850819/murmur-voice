@@ -206,11 +206,9 @@ impl Settings {
         // for non-matching rules, as `str::replace` always allocates a new String in Rust.
         let mut result: Cow<str> = Cow::Borrowed(text);
         for rule in &self.text_replacements {
-            if rule.enabled && !rule.find.is_empty() {
-                if result.contains(&rule.find) {
-                    let replaced = result.replace(&rule.find, &rule.replace);
-                    result = Cow::Owned(replaced);
-                }
+            if rule.enabled && !rule.find.is_empty() && result.contains(&rule.find) {
+                let replaced = result.replace(&rule.find, &rule.replace);
+                result = Cow::Owned(replaced);
             }
         }
         result.into_owned()
