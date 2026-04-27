@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::borrow::Cow;
 
 fn default_true() -> bool {
     true
@@ -200,13 +201,19 @@ impl Settings {
 
     /// Apply text replacement rules to the given text.
     pub fn apply_replacements(&self, text: &str) -> String {
-        let mut result = text.to_string();
+        // [BOLT OPTIMIZATION] Use Cow to avoid allocating a new String initially if no rules match.
+        // Also check `.contains` before `.replace` to prevent redundant O(N) heap allocations
+        // for non-matching rules, as `str::replace` always allocates a new String in Rust.
+        let mut result: Cow<str> = Cow::Borrowed(text);
         for rule in &self.text_replacements {
             if rule.enabled && !rule.find.is_empty() {
-                result = result.replace(&rule.find, &rule.replace);
+                if result.contains(&rule.find) {
+                    let replaced = result.replace(&rule.find, &rule.replace);
+                    result = Cow::Owned(replaced);
+                }
             }
         }
-        result
+        result.into_owned()
     }
 
     /// Returns the whisper language code.
