@@ -1,4 +1,8 @@
 use serde::{Deserialize, Serialize};
+use std::fs::OpenOptions;
+use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -430,11 +434,31 @@ pub(crate) fn save_settings(settings: &Settings, base: &Path) -> Result<(), Stri
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| e.to_string())?;
 
     #[cfg(unix)]
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
-        .map_err(|e| e.to_string())?;
+    {
+        // 🛡️ Sentinel: Fix TOCTOU vulnerability by using atomic creation with secure permissions
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&path)
+            .map_err(|e| e.to_string())?;
+
+        file.write_all(json.as_bytes()).map_err(|e| e.to_string())?;
+
+        // Ensure file handle is dropped before healing permissions on existing files
+        drop(file);
+
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(not(unix))]
+    {
+        std::fs::write(&path, json).map_err(|e| e.to_string())?;
+    }
 
     Ok(())
 }
