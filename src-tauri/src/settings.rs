@@ -206,11 +206,9 @@ impl Settings {
         // processing a long list of replacement rules that mostly don't match.
         let mut result = std::borrow::Cow::Borrowed(text);
         for rule in &self.text_replacements {
-            if rule.enabled && !rule.find.is_empty() {
-                if result.contains(&rule.find) {
-                    let new_str = result.replace(&rule.find, &rule.replace);
-                    result = std::borrow::Cow::Owned(new_str);
-                }
+            if rule.enabled && !rule.find.is_empty() && result.contains(&rule.find) {
+                let new_str = result.replace(&rule.find, &rule.replace);
+                result = std::borrow::Cow::Owned(new_str);
             }
         }
         result.into_owned()
