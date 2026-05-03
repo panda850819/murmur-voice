@@ -203,11 +203,9 @@ impl Settings {
     pub fn apply_replacements(&self, text: &str) -> String {
         let mut result = Cow::Borrowed(text);
         for rule in &self.text_replacements {
-            if rule.enabled && !rule.find.is_empty() {
-                if result.contains(&rule.find) {
-                    // Cow::replace allocates a new String, so we wrap it in Cow::Owned.
-                    result = Cow::Owned(result.replace(&rule.find, &rule.replace));
-                }
+            if rule.enabled && !rule.find.is_empty() && result.contains(&rule.find) {
+                // Cow::replace allocates a new String, so we wrap it in Cow::Owned.
+                result = Cow::Owned(result.replace(&rule.find, &rule.replace));
             }
         }
         result.into_owned()
