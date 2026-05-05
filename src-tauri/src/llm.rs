@@ -543,7 +543,7 @@ mod tests {
     fn test_create_enhancer_groq() {
         let s = Settings {
             llm_enabled: true,
-            groq_api_key: "gsk_test".to_string(),
+            groq_api_key: "placeholder".to_string(),
             llm_provider: "groq".to_string(),
             ..Default::default()
         };
@@ -683,7 +683,7 @@ mod tests {
     #[test]
     fn test_create_translator_groq() {
         let s = Settings {
-            groq_api_key: "gsk_test".to_string(),
+            groq_api_key: "placeholder".to_string(),
             llm_provider: "groq".to_string(),
             llm_enabled: false, // should still work
             ..Default::default()

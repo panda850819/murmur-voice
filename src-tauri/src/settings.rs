@@ -430,11 +430,31 @@ pub(crate) fn save_settings(settings: &Settings, base: &Path) -> Result<(), Stri
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| e.to_string())?;
 
     #[cfg(unix)]
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
-        .map_err(|e| e.to_string())?;
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        use std::io::Write;
+
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&path)
+            .map_err(|e| e.to_string())?;
+        file.write_all(json.as_bytes()).map_err(|e| e.to_string())?;
+        drop(file);
+
+        // Heal permissions on existing files
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(not(unix))]
+    {
+        std::fs::write(&path, json).map_err(|e| e.to_string())?;
+    }
 
     Ok(())
 }
@@ -450,7 +470,7 @@ mod tests {
             "language": "auto",
             "engine": "local",
             "model": "large-v3-turbo",
-            "groq_api_key": "gsk_test",
+            "groq_api_key": "placeholder",
             "window_opacity": 0.78,
             "auto_start": false,
             "llm_enabled": true,
