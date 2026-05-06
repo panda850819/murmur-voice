@@ -201,6 +201,22 @@ const HALLUCINATION_PATTERNS: &[&str] = &[
     "ご視聴ありがとうございました",
 ];
 
+/// Short phrases that Whisper hallucinates on near-silent or very short audio.
+/// These are checked as exact matches (after trimming punctuation/whitespace).
+const HALLUCINATION_EXACT: &[&str] = &[
+    "thank you",
+    "thanks",
+    "you",
+    "bye",
+    "okay",
+    "oh",
+    "ah",
+    "hmm",
+    "謝謝",
+    "谢谢",
+    "嗯",
+];
+
 fn is_hallucination(text: &str) -> bool {
     if text.is_empty() {
         return false;
@@ -209,6 +225,10 @@ fn is_hallucination(text: &str) -> bool {
     let trimmed = lower.trim_matches(|c: char| c.is_whitespace() || c == '.' || c == '!' || c == ',');
     // Reject if only punctuation/whitespace remains after trimming
     if trimmed.is_empty() || trimmed.chars().all(|c| !c.is_alphanumeric()) {
+        return true;
+    }
+    // Exact match against common short hallucinations
+    if HALLUCINATION_EXACT.contains(&trimmed) {
         return true;
     }
     HALLUCINATION_PATTERNS
@@ -253,10 +273,18 @@ mod tests {
         assert!(is_hallucination("  thanks for watching!  "));
         assert!(is_hallucination("Subtitles by Amara.org"));
         assert!(is_hallucination("...")); // only punctuation after trim
+        // Short exact-match hallucinations
+        assert!(is_hallucination("Thank you."));
+        assert!(is_hallucination("Thanks!"));
+        assert!(is_hallucination("  You  "));
+        assert!(is_hallucination("謝謝"));
+        assert!(is_hallucination("Bye."));
+        // Valid short text should pass through
         assert!(!is_hallucination("好")); // valid CJK single char
         assert!(!is_hallucination("OK")); // valid short word
         assert!(!is_hallucination("Hello, how are you today?"));
         assert!(!is_hallucination("The meeting is at 3pm"));
+        assert!(!is_hallucination("Thank you for your help")); // contains "thank you" but longer
         assert!(!is_hallucination("")); // empty is not hallucination (handled elsewhere)
     }
 }
