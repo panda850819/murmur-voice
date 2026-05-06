@@ -45,6 +45,7 @@ playback runner 跑通才能 tag release。沒過就回滾。
 - Power Mode / 螢幕 OCR / Accessibility API integration — 暫緩
 - vault 整合 — 暫緩
 - Windows-specific 功能 cycle（macOS 主力，Windows 跟 release 不主動修）
+- 接 automated scanning bots / coding agents 自動 PR（threat model 是 dogfood 個人工具，不是 prod multi-user app；TOCTOU / XSS / API-key-in-settings 這類在 web app 是真 bug，在這裡不是。per 5/6 Jules cleanup）
 
 ROADMAP.md v0.4 內容（Speed + Data Sovereignty）酌情做，**前提是 quality gate 沒 regression**。
 
